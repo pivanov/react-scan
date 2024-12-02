@@ -36,9 +36,7 @@ export const initReactScanOverlay = () => {
         ? this.canvas.transferControlToOffscreen()
         : this.canvas;
 
-      this.ctx = offscreenCanvas.getContext('2d') as
-        | OffscreenCanvasRenderingContext2D
-        | CanvasRenderingContext2D;
+      this.ctx = offscreenCanvas.getContext('2d')!;
 
       let resizeScheduled = false;
 

@@ -31,14 +31,16 @@
     p = (e, l, a) => (
       (a = e != null ? t(i(e)) : {}),
       ((e, t, l, i) => {
-        if ((t && typeof t === 'object') || typeof t === 'function')
-          {for (const a of o(t))
-            {u.call(e, a) ||
+        if ((t && typeof t === 'object') || typeof t === 'function') {
+          for (const a of o(t)) {
+            u.call(e, a) ||
               a === l ||
               n(e, a, {
                 get: () => t[a],
                 enumerable: !(i = r(t, a)) || i.enumerable,
-              });}}
+              });
+          }
+        }
         return e;
       })(
         e && e.__esModule ? a : n(a, 'default', { value: e, enumerable: !0 }),
@@ -106,10 +108,11 @@
         }
         (h.prototype.isReactComponent = {}),
           (h.prototype.setState = function (e, t) {
-            if (typeof e !== 'object' && typeof e !== 'function' && e != null)
-              {throw Error(
+            if (typeof e !== 'object' && typeof e !== 'function' && e != null) {
+              throw Error(
                 'setState(...): takes an object of state variables to update or a function which returns an object of state variables.',
-              );}
+              );
+            }
             this.updater.enqueueSetState(this, e, t, 'setState');
           }),
           (h.prototype.forceUpdate = function (e) {
@@ -127,19 +130,22 @@
             l = {},
             i = null,
             u = null;
-          if (n != null)
-            {for (o in (void 0 !== n.ref && (u = n.ref),
-            void 0 !== n.key && (i = `${  n.key}`),
-            n))
-              {_.call(n, o) && !S.hasOwnProperty(o) && (l[o] = n[o]);}}
+          if (n != null) {
+            for (o in (void 0 !== n.ref && (u = n.ref),
+            void 0 !== n.key && (i = `${n.key}`),
+            n)) {
+              _.call(n, o) && !S.hasOwnProperty(o) && (l[o] = n[o]);
+            }
+          }
           let a = arguments.length - 2;
           if (a === 1) l.children = r;
           else if (a > 1) {
             for (var c = Array(a), s = 0; s < a; s++) c[s] = arguments[s + 2];
             l.children = c;
           }
-          if (e && e.defaultProps)
-            {for (o in (a = e.defaultProps)) void 0 === l[o] && (l[o] = a[o]);}
+          if (e && e.defaultProps) {
+            for (o in (a = e.defaultProps)) void 0 === l[o] && (l[o] = a[o]);
+          }
           return {
             $$typeof: t,
             type: e,
@@ -157,13 +163,10 @@
           return typeof e === 'object' && e !== null && e.key != null
             ? (function (e) {
                 const t = { '=': '=0', ':': '=2' };
-                return (
-                  `$${ 
-                  e.replace(/[=:]/g, function (e) {
-                    return t[e];
-                  })}`
-                );
-              })(`${  e.key}`)
+                return `$${e.replace(/[=:]/g, function (e) {
+                  return t[e];
+                })}`;
+              })(`${e.key}`)
             : t.toString(36);
         }
         function j(e, r, o, l, i) {
@@ -171,8 +174,8 @@
           (u !== 'undefined' && u !== 'boolean') || (e = null);
           let a = !1;
           if (e === null) a = !0;
-          else
-            {switch (u) {
+          else {
+            switch (u) {
               case 'string':
               case 'number':
                 a = !0;
@@ -183,14 +186,15 @@
                   case n:
                     a = !0;
                 }
-            }}
-          if (a)
-            {return (
+            }
+          }
+          if (a) {
+            return (
               (i = i((a = e))),
-              (e = l === '' ? `.${  O(a, 0)}` : l),
+              (e = l === '' ? `.${O(a, 0)}` : l),
               w(i)
                 ? ((o = ''),
-                  e != null && (o = `${e.replace(E, '$&/')  }/`),
+                  e != null && (o = `${e.replace(E, '$&/')}/`),
                   j(i, r, o, '', function (e) {
                     return e;
                   }))
@@ -210,18 +214,19 @@
                       o +
                         (!i.key || (a && a.key === i.key)
                           ? ''
-                          : `${(`${  i.key}`).replace(E, '$&/')  }/`) +
+                          : `${`${i.key}`.replace(E, '$&/')}/`) +
                         e,
                     )),
                   r.push(i)),
               1
-            );}
-          if (((a = 0), (l = l === '' ? '.' : `${l  }:`), w(e)))
-            {for (var c = 0; c < e.length; c++) {
+            );
+          }
+          if (((a = 0), (l = l === '' ? '.' : `${l}:`), w(e))) {
+            for (var c = 0; c < e.length; c++) {
               var s = l + O((u = e[c]), c);
               a += j(u, r, o, s, i);
-            }}
-          else if (
+            }
+          } else if (
             ((s = (function (e) {
               return e === null || typeof e !== 'object'
                 ? null
@@ -230,20 +235,22 @@
                   : null;
             })(e)),
             typeof s === 'function')
-          )
-            {for (e = s.call(e), c = 0; !(u = e.next()).done; )
-              {a += j((u = u.value), r, o, (s = l + O(u, c++)), i);}}
-          else if (u === 'object')
-            {throw (
+          ) {
+            for (e = s.call(e), c = 0; !(u = e.next()).done; ) {
+              a += j((u = u.value), r, o, (s = l + O(u, c++)), i);
+            }
+          } else if (u === 'object') {
+            throw (
               ((r = String(e)),
               Error(
-                `Objects are not valid as a React child (found: ${ 
+                `Objects are not valid as a React child (found: ${
                   r === '[object Object]'
-                    ? `object with keys {${  Object.keys(e).join(', ')  }}`
-                    : r 
-                  }). If you meant to render a collection of children, use an array instead.`,
+                    ? `object with keys {${Object.keys(e).join(', ')}}`
+                    : r
+                }). If you meant to render a collection of children, use an array instead.`,
               ))
-            );}
+            );
+          }
           return a;
         }
         function k(e, t, n) {
@@ -315,10 +322,11 @@
             );
           },
           only: function (e) {
-            if (!x(e))
-              {throw Error(
+            if (!x(e)) {
+              throw Error(
                 'React.Children.only expected to receive a single React element child.',
-              );}
+              );
+            }
             return e;
           },
         }),
@@ -331,27 +339,30 @@
           (e.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = L),
           (e.act = F),
           (e.cloneElement = function (e, n, r) {
-            if (e == null)
-              {throw Error(
-                `React.cloneElement(...): The argument must be a React element, but you passed ${ 
-                  e 
-                  }.`,
-              );}
-            let o = { ...e.props},
+            if (e == null) {
+              throw Error(
+                `React.cloneElement(...): The argument must be a React element, but you passed ${
+                  e
+                }.`,
+              );
+            }
+            let o = { ...e.props },
               l = e.key,
               i = e.ref,
               u = e._owner;
             if (n != null) {
               if (
                 (void 0 !== n.ref && ((i = n.ref), (u = $.current)),
-                void 0 !== n.key && (l = `${  n.key}`),
+                void 0 !== n.key && (l = `${n.key}`),
                 e.type && e.type.defaultProps)
-              )
-                {var a = e.type.defaultProps;}
-              for (c in n)
-                {_.call(n, c) &&
+              ) {
+                var a = e.type.defaultProps;
+              }
+              for (c in n) {
+                _.call(n, c) &&
                   !S.hasOwnProperty(c) &&
-                  (o[c] = void 0 === n[c] && void 0 !== a ? a[c] : n[c]);}
+                  (o[c] = void 0 === n[c] && void 0 !== a ? a[c] : n[c]);
+              }
             }
             var c = arguments.length - 2;
             if (c === 1) o.children = r;
@@ -484,19 +495,22 @@
             '$$typeof' in e &&
             typeof e.$$typeof === 'symbol' &&
             String(e.$$typeof) === 'Symbol(react.element)'
-          )
-            {return `<${(t = S(e.type)) != null ? t : ''}${Object.keys(e.props || {}).length > 0 ? ' …' : ''}>`;}
+          ) {
+            return `<${(t = S(e.type)) != null ? t : ''}${Object.keys(e.props || {}).length > 0 ? ' …' : ''}>`;
+          }
           if (typeof e === 'object' && e !== null && e.constructor === Object) {
-            for (const t in e)
-              {if (Object.prototype.hasOwnProperty.call(e, t)) return '{…}';}
+            for (const t in e) {
+              if (Object.prototype.hasOwnProperty.call(e, t)) return '{…}';
+            }
             return '{}';
           }
           const n = Object.prototype.toString.call(e).slice(8, -1);
           if (n === 'Object') {
             const t = Object.getPrototypeOf(e),
               n = t == null ? void 0 : t.constructor;
-            if (typeof n === 'function')
-              {return `${n.displayName || n.name || ''}{…}`;}
+            if (typeof n === 'function') {
+              return `${n.displayName || n.name || ''}{…}`;
+            }
           }
           return `${n}{…}`;
         default:
@@ -578,11 +592,14 @@
               return i;
             case 14:
             case 15:
-              if (typeof e.type.compare === 'function')
-                {return !e.type.compare(o, l);}
-              if (o && typeof o === 'object')
-                {for (const e in s(s({}, o), l))
-                  {if (!Object.is(o[e], l[e])) return !0;}}
+              if (typeof e.type.compare === 'function') {
+                return !e.type.compare(o, l);
+              }
+              if (o && typeof o === 'object') {
+                for (const e in s(s({}, o), l)) {
+                  if (!Object.is(o[e], l[e])) return !0;
+                }
+              }
               return i;
             default:
               return (
@@ -594,8 +611,9 @@
           }
         })(e) ||
         O
-      )
-        {return null;}
+      ) {
+        return null;
+      }
       if (!$(e.type)) return null;
       const o = [],
         l = ['function', 'object'];
@@ -610,8 +628,9 @@
           h.isValidElement(t) ||
           h.isValidElement(n) ||
           e === 'children'
-        )
-          {continue;}
+        ) {
+          continue;
+        }
         const r = { name: e, prevValue: t, nextValue: n, unstable: !1 };
         o.push(r);
         const c = g(t),
@@ -623,22 +642,25 @@
       }
       if (!o.length) return null;
       let c = _(e, (e) => typeof e.type === 'string');
-      if ((c || (c = _(e, (e) => typeof e.type === 'string', !0)), !c))
-        {return null;}
+      if ((c || (c = _(e, (e) => typeof e.type === 'string', !0)), !c)) {
+        return null;
+      }
       const f = c.stateNode;
       if (!(f instanceof HTMLElement)) return null;
       if (
         f.tagName.toLowerCase().includes('million') ||
         f.hasAttribute('data-react-scan-ignore')
-      )
-        {return null;}
+      ) {
+        return null;
+      }
       const p = window.getComputedStyle(f);
       if (
         p.display === 'none' ||
         p.visibility === 'hidden' ||
         p.opacity === '0'
-      )
-        {return null;}
+      ) {
+        return null;
+      }
       const d = f.getBoundingClientRect();
       if (
         !(
@@ -647,8 +669,9 @@
           d.bottom <= window.innerHeight ||
           d.right <= window.innerWidth
         )
-      )
-        {return null;}
+      ) {
+        return null;
+      }
       if (!d.height || !d.width) return null;
       const m = (n = S(e.type)) != null ? n : '',
         y = (r = e.updateQueue) == null ? void 0 : r.memoCache,
@@ -657,8 +680,9 @@
           const o = (t = e == null ? void 0 : e.actualDuration) != null ? t : 0;
           let l = o,
             i = (n = e == null ? void 0 : e.child) != null ? n : null;
-          for (; o > 0 && i != null; )
-            {(l -= (r = i.actualDuration) != null ? r : 0), (i = i.sibling);}
+          for (; o > 0 && i != null; ) {
+            (l -= (r = i.actualDuration) != null ? r : 0), (i = i.sibling);
+          }
           return { totalTime: o, selfTime: l };
         })(e);
       let w = null,
@@ -882,8 +906,9 @@
         }
       })() ||
       !1 === V.enabled
-    )
-      {return;}
+    ) {
+      return;
+    }
     (N = !0),
       console.log(
         '%cTry Million Lint to automatically optimize your app: https://million.dev',
@@ -948,16 +973,18 @@
                 !0,
               ) &&
               !r
-            )
-              {return null;}
+            ) {
+              return null;
+            }
           }
           return o.push(n), n;
         };
-        if (r.memoizedUpdaters)
-          {for (const e of r.memoizedUpdaters) {
+        if (r.memoizedUpdaters) {
+          for (const e of r.memoizedUpdaters) {
             const t = u(e);
             t && (t.trigger = !0);
-          }}
+          }
+        }
         _(r.current, (e) => {
           u(e);
         });

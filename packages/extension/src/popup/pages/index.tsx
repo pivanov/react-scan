@@ -2,6 +2,7 @@ import './index.css';
 import { useCallback, useEffect, useState } from 'react';
 import browser from 'webextension-polyfill';
 import { OutgoingMessageSchema } from '../../types/messages';
+import { CspManager } from './csp';
 
 async function getCurrentTab() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -14,8 +15,6 @@ interface PageState {
   rerenderCount: number;
   status: string;
 }
-
-console.log('popup loaded');
 
 export default function Popup() {
   const [enabled, setEnabled] = useState(true);
@@ -47,54 +46,52 @@ export default function Popup() {
       }
     };
 
-    // Listen for messages from port and runtime
     port.onMessage.addListener(listener);
     browser.runtime.onMessage.addListener(listener);
 
     return () => {
-      port.disconnect();
+      port.onMessage.removeListener(listener);
       browser.runtime.onMessage.removeListener(listener);
+      port.disconnect();
     };
   }, []);
 
   const onPanelClick = useCallback(() => {
     void getCurrentTab().then((tab) => {
       if (!tab.id) return;
-      browser.tabs.sendMessage(tab.id, { type: 'OPEN_PANEL' });
+      void browser.tabs.sendMessage(tab.id, { type: 'OPEN_PANEL' });
     });
   }, []);
 
-  const toggleEnabled = useCallback(() => {
-    const newEnabled = !enabled;
-    setEnabled(newEnabled);
-
+  useEffect(() => {
     void getCurrentTab().then((tab) => {
       if (!tab.id) return;
-      browser.tabs.sendMessage(tab.id, {
-        type: newEnabled ? 'START_SCAN' : 'STOP_SCAN',
+      void browser.tabs.sendMessage(tab.id, {
+        type: enabled ? 'START_SCAN' : 'STOP_SCAN',
       });
     });
   }, [enabled]);
 
   return (
     <div className="container">
+      <CspManager />
       <button
+        onClick={() => setEnabled(!enabled)}
         className={enabled ? '' : 'toggle-disabled'}
-        onClick={toggleEnabled}
       >
-        {enabled ? 'Disable' : 'Enable'}
+        {enabled ? 'Stop Scan' : 'Start Scan'}
       </button>
       <div className="stats">
         <div className="stat-row">
-          <span>React Version:</span>
+          <span>React Version</span>
           <span>{pageState.reactVersion}</span>
         </div>
         <div className="stat-row">
-          <span>Components Scanned:</span>
+          <span>Component Count</span>
           <span>{pageState.componentCount}</span>
         </div>
         <div className="stat-row">
-          <span>Re-renders:</span>
+          <span>Re-render Count</span>
           <span>{pageState.rerenderCount}</span>
         </div>
       </div>

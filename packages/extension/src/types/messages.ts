@@ -3,9 +3,23 @@ import { z } from 'zod';
 /**
  *  Incoming messages (from popup to content)
  */
-export const IncomingMessageSchema = z.object({
-  type: z.enum(['OPEN_PANEL', 'START_SCAN', 'STOP_SCAN']),
-});
+export const IncomingMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('OPEN_PANEL'),
+  }),
+  z.object({
+    type: z.literal('START_SCAN'),
+  }),
+  z.object({
+    type: z.literal('STOP_SCAN'),
+  }),
+  z.object({
+    type: z.literal('CSP_RULES_CHANGED'),
+    data: z.object({
+      enabled: z.boolean(),
+    }),
+  }),
+]);
 
 export type IncomingMessage = z.infer<typeof IncomingMessageSchema>;
 
