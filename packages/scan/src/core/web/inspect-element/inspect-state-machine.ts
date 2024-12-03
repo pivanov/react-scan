@@ -2,6 +2,7 @@ import { type Internals, ReactScanInternals } from '../../index';
 import { throttle } from '../utils';
 import { didFiberRender } from '../../instrumentation/fiber';
 import { restoreSizeFromLocalStorage } from '../toolbar';
+import { NO_OP } from '../../utils';
 import { renderPropsAndState } from './view-state';
 import {
   currentLockIconRect,
@@ -40,6 +41,7 @@ export const createInspectElementStateMachine = () => {
   if (typeof window === 'undefined') {
     return;
   }
+
   let canvas = document.getElementById(
     INSPECT_OVERLAY_CANVAS_ID,
   ) as HTMLCanvasElement | null;
@@ -80,6 +82,10 @@ export const createInspectElementStateMachine = () => {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    requestAnimationFrame(() => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
     ctx.restore();
   };
   const unsubscribeFns: Partial<{ [_ in keyof States as Kinds]: () => void }> =
@@ -116,17 +122,7 @@ export const createInspectElementStateMachine = () => {
           }
           case 'inspect-off': {
             clearCanvas();
-            // the canvas doesn't get cleared when the mouse move overlaps with the clear
-            // i can't figure out why this happens, so this is an unfortunate hack
-            const mouseMove = () => {
-              clearCanvas();
-              updateCanvasSize(canvas, ctx);
-            };
-            window.addEventListener('mousemove', mouseMove);
-
-            return () => {
-              window.removeEventListener('mousemove', mouseMove);
-            };
+            return NO_OP;
           }
           case 'inspecting': {
             recursiveRaf(() => {
@@ -224,9 +220,8 @@ export const createInspectElementStateMachine = () => {
               }
             };
             window.addEventListener('keydown', keyDown, { capture: true });
-            let cleanup = () => {
-              /**/
-            };
+            let cleanup = NO_OP;
+
             if (inspectState.hoveredDomElement) {
               cleanup = trackElementPosition(
                 inspectState.hoveredDomElement,
@@ -403,7 +398,6 @@ export const createInspectElementStateMachine = () => {
             };
           }
         }
-        inspectState satisfies never;
       })();
 
       if (unSub) {
@@ -412,9 +406,7 @@ export const createInspectElementStateMachine = () => {
     }, 16),
   );
 
-  return () => {
-    /**/
-  };
+  return NO_OP;
 };
 type CleanupFunction = () => void;
 type PositionCallback = (element: Element) => void;
