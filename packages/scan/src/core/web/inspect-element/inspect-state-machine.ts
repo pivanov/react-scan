@@ -33,7 +33,7 @@ export type States =
 
 export const INSPECT_TOGGLE_ID = 'react-scan-inspect-element-toggle';
 export const INSPECT_OVERLAY_CANVAS_ID = 'react-scan-inspect-canvas';
-let lastHoveredElement: HTMLElement;
+let lastHoveredElement: HTMLElement | undefined
 let animationId: ReturnType<typeof requestAnimationFrame>;
 
 type Kinds = States['kind'];
@@ -98,17 +98,28 @@ export const createInspectElementStateMachine = () => {
   };
 
   const recursiveRaf = (cb: () => void) => {
+    let isActive = true;
+
     const helper = () => {
+      if (!isActive) return;
+
       if (animationId) {
         cancelAnimationFrame(animationId);
       }
 
       animationId = requestAnimationFrame(() => {
+        if (!isActive) return;
+
         cb();
         helper();
       });
     };
     helper();
+
+    return () => {
+      isActive = false;
+      cancelAnimationFrame(animationId);
+    };
   };
   ReactScanInternals.subscribeMultiple(
     ['reportDataByFiber', 'inspectState'],
@@ -121,8 +132,16 @@ export const createInspectElementStateMachine = () => {
             return;
           }
           case 'inspect-off': {
+            cancelAnimationFrame(animationId);
+
             clearCanvas();
-            return NO_OP;
+
+            unsubscribeAll();
+            lastHoveredElement = undefined;
+
+            return () => {
+              clearCanvas();
+            };
           }
           case 'inspecting': {
             recursiveRaf(() => {
