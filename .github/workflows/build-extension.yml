@@ -60,5 +60,5 @@ jobs:
 
       - name: Commit and push if changed
         run: |
-          git add packages/extension/build/react-scan-extension.zip
+          git add -f packages/extension/build/react-scan-extension.zip
           git diff --staged --quiet || (git commit -m "chore: update react-scan-extension.zip [skip ci]" && git push)
