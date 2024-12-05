@@ -7,7 +7,7 @@
     "clean": "rm -rf dist build",
     "build": "vite build",
     "dev": "vite",
-    "zip": "bestzip build/react-scan-extension.zip dist/*",
+    "zip": "mkdir -p build && bestzip build/react-scan-extension.zip dist/*",
     "build:zip": "pnpm clean && pnpm build && pnpm zip"
   },
   "dependencies": {
