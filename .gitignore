@@ -2,3 +2,5 @@ node_modules
 .DS_Store
 .env
 dist
+packages/extension/build/
+!packages/extension/build/react-scan-extension.zip
