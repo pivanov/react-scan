@@ -23,6 +23,74 @@ export const renderPropsAndState = (
 
   const scrollTop = propsContainer.scrollTop;
 
+  const container = document.getElementById('react-scan-root');
+  const shadow = container?.shadowRoot;
+
+  if (!shadow) {
+    return;
+  }
+
+  const existingStyles = shadow.querySelector('#react-scan-prop-styles');
+  if (!existingStyles) {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'react-scan-prop-styles';
+    styleElement.textContent = `
+      .react-scan-header-right {
+        display: flex;
+        gap: 4px;
+      }
+      .react-scan-replay-button,
+      .react-scan-close-button {
+        display: flex;
+        align-items: center;
+        padding: 4px;
+        border: none;
+        border-radius: 4px;
+        color: #fff;
+        cursor: pointer;
+        transition: opacity 150ms ease;
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+      }
+      .react-scan-close-button {
+        background: rgba(255, 255, 255, 0.01);
+      }
+      .react-scan-close-button:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+      .react-scan-replay-button {
+        background: rgba(142, 97, 227, 0.5) !important;
+      }
+      .react-scan-replay-button.disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .react-scan-replay-button:hover {
+        background: rgba(142, 97, 227, 0.25);
+      }
+      .react-scan-replay-button::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        transform: translateX(-100%);
+        animation: shimmer 2s infinite;
+        background: linear-gradient(
+          to right,
+          transparent,
+          rgba(142, 97, 227, 0.3),
+          transparent
+        );
+      }
+      @keyframes shimmer {
+        100% {
+          transform: translateX(100%);
+        }
+      }
+    `;
+    shadow.appendChild(styleElement);
+  }
+
   const fiberContext = tryOrElse(
     () => Array.from(getAllFiberContexts(fiber).entries()).map((x) => x[1]),
     [],
@@ -55,13 +123,17 @@ export const renderPropsAndState = (
         canEdit
           ? `
         <button class="react-scan-replay-button" title="Replay component">
-         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgb(203, 182, 242)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scan-eye"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/></svg>
+          <svg width="15" height="15" fill="none" stroke="rgb(203, 182, 242)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <use href="#rs-icon-scan-eye"/>
+          </svg>
         </button>
       `
           : ''
       }
       <button class="react-scan-close-button" title="Close">
-        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <use href="#rs-icon-close"/>
+        </svg>
       </button>
     </div>
   `;
@@ -116,63 +188,6 @@ export const renderPropsAndState = (
       })();
     });
   }
-
-  const styleElement = document.createElement('style');
-  styleElement.textContent = `
-    .react-scan-header-right {
-      display: flex;
-      gap: 4px;
-    }
-    .react-scan-replay-button,
-    .react-scan-close-button {
-      display: flex;
-      align-items: center;
-      padding: 4px;
-      border: none;
-      border-radius: 4px;
-      color: #fff;
-      cursor: pointer;
-      transition: opacity 150ms ease;
-      position: relative;
-      overflow: hidden;
-      isolation: isolate;
-    }
-    .react-scan-close-button {
-      background: rgba(255, 255, 255, 0.01);
-    }
-    .react-scan-close-button:hover {
-      background: rgba(255, 255, 255, 0.15);
-    }
-    .react-scan-replay-button {
-      background: rgba(142, 97, 227, 0.5) !important;
-    }
-    .react-scan-replay-button.disabled {
-      opacity: 0.5;
-      pointer-events: none;
-    }
-    .react-scan-replay-button:hover {
-      background: rgba(142, 97, 227, 0.25);
-    }
-    .react-scan-replay-button::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      transform: translateX(-100%);
-      animation: shimmer 2s infinite;
-      background: linear-gradient(
-        to right,
-        transparent,
-        rgba(142, 97, 227, 0.3),
-        transparent
-      );
-    }
-    @keyframes shimmer {
-      100% {
-        transform: translateX(100%);
-      }
-    }
-  `;
-  document.head.appendChild(styleElement);
 
   const content = document.createElement('div');
   content.className = 'react-scan-content';

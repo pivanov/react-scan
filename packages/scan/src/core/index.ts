@@ -10,7 +10,6 @@ import {
 import { logIntro } from './web/log';
 import { playGeigerClickSound } from './web/geiger';
 import { createPerfObserver } from './web/perf-observer';
-import { initReactScanOverlay } from './web/overlay';
 import {
   createInspectElementStateMachine,
   type States,
@@ -290,16 +289,41 @@ export const start = () => {
     return;
   }
 
-  if (document.querySelector('react-scan-overlay')) return;
-  initReactScanOverlay();
-
-  const overlayElement = document.createElement('react-scan-overlay') as any;
-  document.documentElement.appendChild(overlayElement);
-
   if (ReactScanInternals.options.showToolbar) {
     createToolbar();
   }
-  const ctx = overlayElement.getContext();
+
+  // Get the shadow root from our container
+  const container = document.getElementById('react-scan-root');
+  const shadow = container?.shadowRoot;
+
+  if (!shadow) {
+    return;
+  }
+
+  const overlayElement = document.createElement('canvas');
+  overlayElement.id = 'react-scan-overlay';
+  shadow.appendChild(overlayElement);
+
+  const ctx = overlayElement.getContext('2d');
+  if (!ctx) return;
+
+  // Add resize handling
+  const updateCanvasSize = () => {
+    overlayElement.width = window.innerWidth * window.devicePixelRatio;
+    overlayElement.height = window.innerHeight * window.devicePixelRatio;
+    overlayElement.style.width = `${window.innerWidth}px`;
+    overlayElement.style.height = `${window.innerHeight}px`;
+  };
+
+  window.addEventListener('resize', updateCanvasSize);
+  window.addEventListener('scroll', () => {
+    flushOutlines(ctx, new Map());
+  });
+
+  // Initial size setup
+  updateCanvasSize();
+
   createInspectElementStateMachine();
 
   const audioContext =

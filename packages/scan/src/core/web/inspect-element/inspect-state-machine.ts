@@ -40,7 +40,16 @@ export const createInspectElementStateMachine = () => {
   if (typeof window === 'undefined') {
     return;
   }
-  let canvas = document.getElementById(
+
+  // Get the shadow root from our container
+  const container = document.getElementById('react-scan-root');
+  const shadow = container?.shadowRoot;
+
+  if (!shadow) {
+    return;
+  }
+
+  let canvas = shadow.getElementById(
     INSPECT_OVERLAY_CANVAS_ID,
   ) as HTMLCanvasElement | null;
 
@@ -48,15 +57,15 @@ export const createInspectElementStateMachine = () => {
     canvas = document.createElement('canvas');
     canvas.id = INSPECT_OVERLAY_CANVAS_ID;
     canvas.style.cssText = `
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100vw;
-    height: 100vh;
-    pointer-events: none;
-    z-index: 214748367;
-  `;
-    document.documentElement.appendChild(canvas);
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 214748367;
+    `;
+    shadow.appendChild(canvas);  // Append to shadow DOM instead of document
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) {
       return;
@@ -151,7 +160,8 @@ export const createInspectElementStateMachine = () => {
               z-index: ${parseInt(canvas.style.zIndex) - 1};
               pointer-events: auto;
             `;
-            document.body.insertBefore(eventCatcher, document.body.firstChild);
+            shadow.appendChild(eventCatcher);  // Append to shadow DOM instead of document.body
+
             let currentHoveredElement: HTMLElement | null = null;
             const mouseMove = throttle((e: MouseEvent) => {
               if (ReactScanInternals.inspectState.kind !== 'inspecting') {
@@ -249,7 +259,7 @@ export const createInspectElementStateMachine = () => {
                 capture: true,
               });
               window.removeEventListener('keydown', keyDown, { capture: true });
-              eventCatcher.parentNode?.removeChild(eventCatcher);
+              eventCatcher.remove();
               cleanup();
             };
           }
