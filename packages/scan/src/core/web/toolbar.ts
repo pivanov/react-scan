@@ -3,6 +3,7 @@ import { createElement, throttle } from './utils';
 import { MONO_FONT } from './outline';
 import { INSPECT_TOGGLE_ID } from './inspect-element/inspect-state-machine';
 import { getNearestFiberFromElement } from './inspect-element/utils';
+import { ICONS } from './icons';
 
 let isDragging = false;
 let isResizing = false;
@@ -11,6 +12,7 @@ let initialMouseX = 0;
 
 const EDGE_PADDING = 15;
 const ANIMATION_DURATION = 300; // milliseconds
+const TRANSITION_MS = '150ms';
 
 export const persistSizeToLocalStorage = throttle((width: number) => {
   localStorage.setItem('react-scan-toolbar-width', String(width));
@@ -28,26 +30,36 @@ export const createToolbar = (): (() => void) => {
     };
   }
 
-  const PLAY_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
-  `;
-  const PAUSE_SVG = `
- <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
-  `;
-  const INSPECTING_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-dashed-mouse-pointer"><path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"/><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h2"/><path d="M14 3h1"/><path d="M3 9v1"/><path d="M21 9v2"/><path d="M3 14v1"/></svg>`;
-  const FOCUSING_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-mouse-pointer"><path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"/><path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/></svg>`;
-  const NEXT_SVG = `<svg class="nav-button" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h6V5l7 7-7 7v-4H6V9z"/></svg>`;
-  const PREVIOUS_SVG = `<svg class="nav-button" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15h-6v4l-7-7 7-7v4h6v6z"/></svg>`;
-  const TRANSITION_MS = '150ms';
+  // Remove existing elements if they exist
+  const existingContainer = document.getElementById('react-scan-root');
+  if (existingContainer) existingContainer.remove();
 
-  const SOUND_ON_SVG = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-2"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
-  `;
+  const existingToolbar = document.getElementById('react-scan-toolbar');
+  if (existingToolbar) existingToolbar.remove();
 
-  const SOUND_OFF_SVG = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-x"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
-  `;
+  // Create container for shadow DOM
+  const container = document.createElement('div');
+  container.id = 'react-scan-root';
+  const shadow = container.attachShadow({ mode: 'open' });
 
+  // Add container to document first (so shadow DOM is available)
+  document.documentElement.appendChild(container);
+
+  // Create SVG sprite sheet node directly
+  const iconSprite = new DOMParser().parseFromString(ICONS, 'image/svg+xml').documentElement;
+  shadow.appendChild(iconSprite);
+
+  // Then replace the inline SVGs with references to the sprite
+  const PLAY_SVG = `<svg width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-eye-off"/></svg>`;
+  const PAUSE_SVG = `<svg width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-eye"/></svg>`;
+  const INSPECTING_SVG = `<svg width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-inspect"/></svg>`;
+  const FOCUSING_SVG = `<svg width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-focus"/></svg>`;
+  const NEXT_SVG = `<svg class="nav-button" width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-next"/></svg>`;
+  const PREVIOUS_SVG = `<svg class="nav-button" width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-previous"/></svg>`;
+  const SOUND_ON_SVG = `<svg width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-volume-on"/></svg>`;
+  const SOUND_OFF_SVG = `<svg width="15" height="15" fill="none" stroke="currentColor"><use href="#rs-icon-volume-off"/></svg>`;
+
+  // Create toolbar
   const toolbar = createElement(`
   <div id="react-scan-toolbar" style="
     position: fixed;
@@ -197,12 +209,12 @@ export const createToolbar = (): (() => void) => {
   </div>
 `) as HTMLDivElement;
 
+  // Add styles to shadow DOM
   const styleElement = document.createElement('style');
   styleElement.textContent = `
   #react-scan-toolbar {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
-
 
   .react-scan-inspector {
     font-size: 13px;
@@ -464,8 +476,10 @@ export const createToolbar = (): (() => void) => {
     opacity: var(--nav-opacity, 1);
   }
   `;
+  shadow.appendChild(styleElement);
 
-  if (document.head) document.head.appendChild(styleElement);
+  // Add toolbar to shadow DOM
+  shadow.appendChild(toolbar);
 
   const inspectBtn = toolbar.querySelector<HTMLButtonElement>(
     `#${INSPECT_TOGGLE_ID}`,
@@ -493,8 +507,6 @@ export const createToolbar = (): (() => void) => {
 
   let isActive = !ReactScanInternals.isPaused;
   let isSoundOn = false;
-
-  document.documentElement.appendChild(toolbar);
 
   let initialX = 0;
   let initialY = 0;
@@ -788,13 +800,6 @@ export const createToolbar = (): (() => void) => {
 
   updateUI();
 
-  const existing = document.getElementById('react-scan-toolbar');
-  if (existing) existing.remove();
-
-  if (!toolbar.parentElement) {
-    document.documentElement.appendChild(toolbar);
-  }
-
   ReactScanInternals.inspectState = {
     kind: 'inspect-off',
     propContainer,
@@ -818,5 +823,9 @@ export const createToolbar = (): (() => void) => {
     window.removeEventListener('scroll', handleViewportChange);
   };
 
-  return cleanup;
+  // Add cleanup for icons
+  return () => {
+    cleanup(); // Original cleanup
+    container.remove();
+  };
 };
