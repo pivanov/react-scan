@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - 'packages/extension/**'
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
@@ -27,7 +30,7 @@ jobs:
       - name: Setup PNPM
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9.x
 
       - name: Get pnpm store directory
         id: pnpm-cache
@@ -64,3 +67,10 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add -f packages/extension/build/*.zip
           git diff --staged --quiet || (git commit -m "chore: update extension builds [skip ci]" && git push)
+
+      - name: Validate lock file
+        run: |
+          pnpm install --frozen-lockfile
+
+      - name: Check duplicates
+        run: pnpm dedupe --check
