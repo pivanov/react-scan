@@ -296,18 +296,11 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
             return;
           }
 
-          const reportDataFiber =
-            Store.reportData.get(parentCompositeFiber) ??
-            (parentCompositeFiber.alternate
-              ? Store.reportData.get(parentCompositeFiber.alternate)
-              : null);
-
           const didRender = didFiberRender(parentCompositeFiber); // because we react to any change, not just this fibers change, we need this check to know if the current fiber re-rendered for this publish
 
           renderPropsAndState(
             didRender,
             parentCompositeFiber,
-            reportDataFiber,
           );
 
           const keyDown = (e: KeyboardEvent) => {

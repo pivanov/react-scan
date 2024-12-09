@@ -9,7 +9,7 @@ import {
   type States,
 } from './inspect-element/inspect-state-machine';
 import { getNearestFiberFromElement } from './inspect-element/utils';
-// import { RenderPropsAndState } from './components/render-props-and-state';
+import { RenderPropsAndState } from './components/scan-header';
 import { Icon } from './components/icon';
 
 const isSoundOnSignal = signal(false);
@@ -559,7 +559,7 @@ export const Toolbar = ({
           'box-shadow-[0_4px_12px_rgba(0,0,0,0.2)]',
         )}
       >
-        {/* <RenderPropsAndState /> */}
+        <RenderPropsAndState />
 
         <div
           id="react-scan-props"

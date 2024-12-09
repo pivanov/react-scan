@@ -15,6 +15,29 @@ button {
   @apply cursor-pointer;
 }
 
+/*
+  Using CSS content with data attributes is more performant than:
+  1. React re-renders with JSX text content
+  2. Direct DOM manipulation methods:
+     - element.textContent (creates/updates text nodes, triggers repaint)
+     - element.innerText (triggers reflow by computing styles & layout)
+     - element.innerHTML (heavy parsing, triggers reflow, security risks)
+  3. Multiple data attributes with complex CSS concatenation
+
+  This approach:
+  - Avoids React reconciliation
+  - Uses browser's native CSS engine (optimized content updates)
+  - Minimizes main thread work
+  - Reduces DOM operations
+  - Avoids forced reflows (layout recalculation)
+  - Only triggers necessary repaints
+  - Keeps pseudo-element updates in render layer
+*/
+.with-data-text::before {
+  content: attr(data-text);
+}
+
+
 /* We will refactor this later */
 .react-scan-header-right {
   display: flex;
