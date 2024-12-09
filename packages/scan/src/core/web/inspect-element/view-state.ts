@@ -16,12 +16,15 @@ export const renderPropsAndState = (
   didRender: boolean,
   fiber: any,
   reportDataFiber: any,
-  propsContainer: HTMLDivElement,
 ) => {
+  const propContainer = Store.inspectState.value.propContainer;
+
+  if (!propContainer) {
+    return;
+  }
+
   const { overrideProps } = getOverrideMethods();
   const canEdit = !!overrideProps;
-
-  const scrollTop = propsContainer.scrollTop;
 
   const fiberContext = tryOrElse(
     () => Array.from(getAllFiberContexts(fiber).entries()).map((x) => x[1]),
@@ -38,7 +41,7 @@ export const renderPropsAndState = (
 
   const changedProps = new Set(getChangedProps(fiber));
   const changedState = new Set(getChangedState(fiber));
-  propsContainer.innerHTML = '';
+  propContainer.innerHTML = '';
 
   const inspector = document.createElement('div');
   inspector.className = 'react-scan-inspector';
@@ -69,24 +72,23 @@ export const renderPropsAndState = (
       </button>
     </div>
   `;
+
+  // @TODO: @pivanov finish scan-header component
   inspector.appendChild(header);
 
   const closeButton = header.querySelector<HTMLButtonElement>(
     '.react-scan-close-button',
   )!;
+
   closeButton.addEventListener('click', (e) => {
     e.stopPropagation();
-    const currentState = Store.inspectState.value;
-    if (currentState.kind !== 'focused') return;
 
-    propsContainer.style.maxHeight = '0';
-    propsContainer.style.width = 'fit-content';
-    propsContainer.innerHTML = '';
-
-    Store.inspectState.value = {
-      kind: 'inspect-off',
-      propContainer: currentState.propContainer,
-    };
+    if (Store.inspectState.value.propContainer) {
+      Store.inspectState.value = {
+        kind: 'inspect-off',
+        propContainer: Store.inspectState.value.propContainer,
+      };
+    }
   });
 
   if (canEdit) {
@@ -121,63 +123,6 @@ export const renderPropsAndState = (
     });
   }
 
-  const styleElement = document.createElement('style');
-  styleElement.textContent = `
-    .react-scan-header-right {
-      display: flex;
-      gap: 4px;
-    }
-    .react-scan-replay-button,
-    .react-scan-close-button {
-      display: flex;
-      align-items: center;
-      padding: 4px;
-      border: none;
-      border-radius: 4px;
-      color: #fff;
-      cursor: pointer;
-      transition: opacity 150ms ease;
-      position: relative;
-      overflow: hidden;
-      isolation: isolate;
-    }
-    .react-scan-close-button {
-      background: rgba(255, 255, 255, 0.01);
-    }
-    .react-scan-close-button:hover {
-      background: rgba(255, 255, 255, 0.15);
-    }
-    .react-scan-replay-button {
-      background: rgba(142, 97, 227, 0.5) !important;
-    }
-    .react-scan-replay-button.disabled {
-      opacity: 0.5;
-      pointer-events: none;
-    }
-    .react-scan-replay-button:hover {
-      background: rgba(142, 97, 227, 0.25);
-    }
-    .react-scan-replay-button::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      transform: translateX(-100%);
-      animation: shimmer 2s infinite;
-      background: linear-gradient(
-        to right,
-        transparent,
-        rgba(142, 97, 227, 0.3),
-        transparent
-      );
-    }
-    @keyframes shimmer {
-      100% {
-        transform: translateX(100%);
-      }
-    }
-  `;
-  document.head.appendChild(styleElement);
-
   const content = document.createElement('div');
   content.className = 'react-scan-content';
 
@@ -190,7 +135,7 @@ export const renderPropsAndState = (
           componentName,
           didRender,
           fiber,
-          propsContainer,
+          propContainer,
           'Props',
           props,
           changedProps,
@@ -242,7 +187,7 @@ export const renderPropsAndState = (
           componentName,
           didRender,
           fiber,
-          propsContainer,
+          propContainer,
           'Context',
           contextObj,
           changedKeys,
@@ -272,7 +217,7 @@ export const renderPropsAndState = (
           componentName,
           didRender,
           fiber,
-          propsContainer,
+          propContainer,
           'State',
           stateObj,
           changedState,
@@ -291,13 +236,8 @@ export const renderPropsAndState = (
   sections.forEach((section) => content.appendChild(section.element));
 
   inspector.appendChild(content);
-  propsContainer.appendChild(inspector);
 
-  requestAnimationFrame(() => {
-    const contentHeight = inspector.getBoundingClientRect().height;
-    propsContainer.style.maxHeight = `${contentHeight}px`;
-    propsContainer.scrollTop = scrollTop;
-  });
+  propContainer.appendChild(inspector);
 };
 
 const lastChangedAt = new Map<string, number>();
@@ -311,6 +251,7 @@ const renderSection = (
   data: any,
   changedKeys: Set<string> = new Set(),
 ) => {
+
   const section = document.createElement('div');
   section.className = 'react-scan-section';
   section.textContent = title;
@@ -581,14 +522,6 @@ export const createPropertyElement = (
           container.classList.remove('react-scan-expanded');
           content.classList.add('react-scan-hidden');
         }
-
-        requestAnimationFrame(() => {
-          const inspector = propsContainer.firstElementChild as HTMLElement;
-          if (inspector) {
-            const contentHeight = inspector.getBoundingClientRect().height;
-            propsContainer.style.maxHeight = `${contentHeight}px`;
-          }
-        });
       });
     } else {
       const preview = document.createElement('div');
