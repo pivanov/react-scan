@@ -1,4 +1,3 @@
-
 import type { Fiber } from 'react-reconciler';
 import type * as React from 'react';
 import { type Signal, signal } from '@preact/signals';
@@ -244,6 +243,7 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
 
   if (prevRenderData) {
     prevRenderData.renders.push(...renders);
+    prevRenderData.count += renders.length;
   } else {
     const { selfTime } = getTimings(fiber);
 
@@ -263,6 +263,7 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
 
     if (prevLegacyRenderData) {
       prevLegacyRenderData.renders.push(...renders);
+      prevLegacyRenderData.count += renders.length;
     } else {
       const { selfTime } = getTimings(fiber);
 
@@ -365,8 +366,8 @@ export const start = () => {
   const audioContext =
     typeof window !== 'undefined'
       ? new (window.AudioContext ||
-          // @ts-expect-error -- This is a fallback for Safari
-          window.webkitAudioContext)()
+        // @ts-expect-error -- This is a fallback for Safari
+        window.webkitAudioContext)()
       : null;
 
   createPerfObserver();
