@@ -169,7 +169,7 @@ const renderSection = (
 
   const section = document.createElement('div');
   section.className = 'react-scan-section';
-  section.textContent = title;
+  section.dataset.section = title;
 
   const entries = Object.entries(data).sort(([keyA], [keyB]) => {
     const pathA = getPath(componentName, title.toLowerCase(), '', keyA);
@@ -312,11 +312,14 @@ export const createPropertyElement = (
       preview.className = 'react-scan-preview-line';
       preview.dataset.key = key;
       preview.dataset.section = section;
+
+
       preview.innerHTML = `
+        <span style="width: 8px; display: inline-block"></span>
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
           value,
-        )}">${getValuePreview(value)}</span>
+        )} react-scan-value with-data-text" data-text='${getValuePreview(value)}'></span>
       `;
 
       const content = document.createElement('div');
@@ -448,7 +451,7 @@ export const createPropertyElement = (
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
           value,
-        )} react-scan-value">${getValuePreview(value)}</span>
+        )} react-scan-value with-data-text" data-text='${getValuePreview(value)}'></span>
       `;
       container.appendChild(preview);
 
@@ -477,7 +480,7 @@ export const createPropertyElement = (
             const updateValue = () => {
               const newValue = input.value;
               value = typeof value === 'number' ? Number(newValue) : newValue;
-              valueElement.textContent = getValuePreview(value);
+              (valueElement as HTMLElement).dataset.text = getValuePreview(value);
 
               tryOrElse(() => {
                 input.replaceWith(valueElement);
@@ -579,7 +582,7 @@ export const getValuePreview = (value: any) => {
   if (value === undefined) return 'undefined';
   switch (typeof value) {
     case 'string':
-      return `"${value}"`;
+      return `&quot;${value}&quot;`;
     case 'number':
       return value.toString();
     case 'boolean':

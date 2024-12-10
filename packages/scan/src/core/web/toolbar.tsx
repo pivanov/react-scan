@@ -73,6 +73,29 @@ const persistPositionToLocalStorage = throttle((x: number, y: number) => {
   localStorage.setItem('react-scan-toolbar-y', String(y));
 }, 100);
 
+// Ensure width stays within bounds and handle edge cases
+const getConstrainedWidth = (width: number, maxWidth?: number | null): number => {
+  // Base width with border adjustment
+  const adjustedWidth = width - 2; // 2px for borders
+
+  // Calculate max allowed width based on window or parent
+  const maxAllowedWidth = (() => {
+    // If valid maxWidth is provided (from parent), use it with padding
+    if (typeof maxWidth === 'number' && maxWidth > 0) {
+      return maxWidth - (2 * EDGE_PADDING);
+    }
+
+    // Fallback to window width with ratio and padding
+    return (window.innerWidth * MAX_WIDTH_RATIO) - (2 * EDGE_PADDING);
+  })();
+
+  // Ensure width is between MIN_WIDTH and maxAllowedWidth
+  return Math.max(
+    MIN_WIDTH,
+    Math.min(adjustedWidth, maxAllowedWidth)
+  );
+};
+
 // Update props interface to make isPaused optional
 interface ToolbarProps {
   inspectState: Signal<States>;
@@ -113,8 +136,10 @@ export const Toolbar = ({
 
   useEffect(() => {
     if (refToolbarContent.current && refPropContainer.current) {
+      const maxWidth = getConstrainedWidth(width, refPropContainer.current.parentElement?.clientWidth);
       refToolbarContent.current.style.maxHeight = focusActive ? '50vh' : `39px`;
-      refPropContainer.current.style.minWidth = focusActive ? `${width - 2}px` : '100%';
+      refToolbarContent.current.style.maxWidth = `${maxWidth}px`;
+      refPropContainer.current.style.minWidth = focusActive ? `${maxWidth - 2}px` : '100%';
     }
   }, [focusActive]);
 
