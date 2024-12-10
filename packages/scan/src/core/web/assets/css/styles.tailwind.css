@@ -37,6 +37,16 @@ button {
   content: attr(data-text);
 }
 
+.with-data-text-max-lines-5 {
+  &::before {
+    content: attr(data-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
 
 /* We will refactor this later */
 .react-scan-header-right {
@@ -162,14 +172,13 @@ button {
 }
 
 .react-scan-content {
-  padding: 12px;
-  background: #000;
+  @apply py-2 px-4;
+  @apply bg-black text-white;
 }
 
 .react-scan-section {
-  color: #888;
-  margin-bottom: 16px;
-  font-size: 12px;
+  @apply py-2 px-4;
+  @apply before:content-[attr(data-section)] before:text-xs before:text-gray-500;
 }
 
 .react-scan-section:last-child {
