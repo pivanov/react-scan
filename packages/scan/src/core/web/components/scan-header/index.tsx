@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from "preact/hooks";
-import { didFiberRender } from 'bippy';
+import { getDisplayName } from 'bippy';
 import { Store } from "../../../..";
 import { getCompositeComponentFromElement, getOverrideMethods } from "../../inspect-element/utils";
 import { replayComponent } from "../../inspect-element/view-state";
@@ -26,10 +26,10 @@ export const RenderPropsAndState = () => {
         return;
       }
 
-      const { parentCompositeFiber } = getCompositeComponentFromElement(inspectState.focusedDomElement);
-      if (!parentCompositeFiber) return;
 
-      if (!didFiberRender(parentCompositeFiber)) return;
+      const { parentCompositeFiber } = getCompositeComponentFromElement(inspectState.focusedDomElement);
+
+      if (!parentCompositeFiber) return;
 
       const reportDataFiber =
         Store.reportData.get(parentCompositeFiber) ??
@@ -37,7 +37,8 @@ export const RenderPropsAndState = () => {
           ? Store.reportData.get(parentCompositeFiber.alternate)
           : null);
 
-      const componentName = parentCompositeFiber.type?.displayName || parentCompositeFiber.type?.name || 'Unknown';
+      const componentName = getDisplayName(parentCompositeFiber.type) ?? 'Unknown';
+
       const renderCount = reportDataFiber?.count ?? 0;
       const renderTime = reportDataFiber?.time ?? 0;
 
