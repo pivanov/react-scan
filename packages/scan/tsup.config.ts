@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { defineConfig } from 'tsup';
+import { TsconfigPathsPlugin } from '@esbuild-plugins/tsconfig-paths';
 
 const DIST_PATH = './dist';
 
@@ -53,6 +54,9 @@ export default defineConfig([
       'react-router-dom',
       '@remix-run/react',
     ],
+    loader: {
+      '.css': 'text',
+    },
   },
   {
     entry: [
@@ -74,6 +78,7 @@ export default defineConfig([
     platform: 'browser',
     treeshake: true,
     dts: true,
+    watch: process.env.NODE_ENV === 'development',
     async onSuccess() {
       await Promise.all([
         addDirectivesToChunkFiles(DIST_PATH),
@@ -81,7 +86,7 @@ export default defineConfig([
         addDirectivesToChunkFiles(`${DIST_PATH}/core/monitor`),
       ]);
     },
-    minify: false,
+    minify: process.env.NODE_ENV === 'production',
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
@@ -94,21 +99,30 @@ export default defineConfig([
       'react-router',
       'react-router-dom',
       '@remix-run/react',
+      'preact',
+      '@preact/signals',
+    ],
+    loader: {
+      '.css': 'text',
+    },
+    esbuildPlugins: [
+      TsconfigPathsPlugin({ tsconfig: path.resolve(__dirname, './tsconfig.json') })
     ],
   },
   {
     entry: ['./src/cli.mts'],
-    outDir: './dist',
+    outDir: DIST_PATH,
     splitting: false,
     clean: true,
     sourcemap: false,
     format: ['cjs'],
     target: 'esnext',
     platform: 'node',
-    minify: false,
+    minify: process.env.NODE_ENV === 'production',
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
+    watch: process.env.NODE_ENV === 'development',
   },
   {
     entry: [
@@ -121,7 +135,7 @@ export default defineConfig([
       './src/react-component-name/rollup.ts',
       './src/react-component-name/astro.ts',
     ],
-    outDir: './dist/react-component-name',
+    outDir: `${DIST_PATH}/react-component-name`,
     splitting: false,
     sourcemap: false,
     clean: true,
@@ -143,7 +157,7 @@ export default defineConfig([
       'vite',
     ],
     dts: true,
-    minify: false,
+    minify: process.env.NODE_ENV === 'production',
     treeshake: true,
     env: {
       NODE_ENV: process.env.NODE_ENV || 'development',

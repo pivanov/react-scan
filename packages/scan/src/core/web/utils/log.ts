@@ -1,5 +1,5 @@
-import type { Render } from '../instrumentation';
-import { getLabelText } from '../utils';
+import type { Render } from '../../instrumentation';
+import { getLabelText } from '../../utils';
 
 export const log = (renders: Array<Render>) => {
   const logMap = new Map<

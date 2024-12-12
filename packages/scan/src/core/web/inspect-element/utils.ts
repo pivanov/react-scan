@@ -10,7 +10,12 @@ import {
   isCompositeFiber,
 } from 'bippy';
 import { ReactScanInternals, Store } from '../../index';
-import { getRect } from '../outline';
+import { getRect } from '../utils/outline';
+
+interface OverrideMethods {
+  overrideProps: ((fiber: Fiber, path: Array<string>, value: any) => void) | null;
+  overrideHookState: ((fiber: Fiber, id: string, path: Array<any>, value: any) => void) | null;
+}
 
 export const getFiberFromElement = (element: Element): Fiber | null => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
@@ -284,7 +289,7 @@ export const hasValidParent = () => {
   return hasValidParent;
 };
 
-export const getOverrideMethods = () => {
+export const getOverrideMethods = (): OverrideMethods => {
   let overrideProps = null;
   let overrideHookState = null;
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
@@ -317,5 +322,6 @@ export const getOverrideMethods = () => {
       }
     }
   }
+
   return { overrideProps, overrideHookState };
 };

@@ -1,7 +1,7 @@
 'use client';
-import React from 'react';
 import { getDisplayName, isCompositeFiber } from 'bippy';
 import { type Fiber } from 'react-reconciler';
+import { useEffect } from 'preact/hooks';
 import {
   type MonitoringOptions,
   ReactScanInternals,
@@ -44,8 +44,7 @@ export const Monitoring = ({
   Store.monitor.value.route = route;
   Store.monitor.value.path = path;
 
-  // eslint-disable-next-line import/no-named-as-default-member
-  React.useEffect(() => {
+  useEffect(() => {
     scanMonitoring({
       enabled: true,
     });
