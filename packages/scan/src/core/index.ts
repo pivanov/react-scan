@@ -133,12 +133,13 @@ export type MonitoringOptions = Pick<
 
 interface Monitor {
   pendingRequests: number;
-  url: string | null;
-  apiKey: string | null;
   interactions: Array<InternalInteraction>;
-  route: string | null;
   session: ReturnType<typeof getSession>;
-  path: string | null;
+  url: string | null;
+  route: string | null;
+  apiKey: string | null;
+  commit: string | null;
+  branch: string | null;
 }
 
 interface StoreType {

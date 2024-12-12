@@ -1,14 +1,14 @@
 import { createElement } from 'react';
-import { Monitoring as BaseMonitoring } from '../..';
+import { Monitoring as BaseMonitoring, type MonitoringWithoutRouteProps } from '../..';
 import { computeRoute } from '../utils';
 
 export function AstroMonitor(props: {
   url?: string;
   apiKey: string;
-  pathname: string;
+  path: string;
   params: Record<string, string>;
-}) {
-  const path = props.pathname;
+} & MonitoringWithoutRouteProps) {
+  const path = props.path;
   const route = computeRoute(path, props.params);
 
   return createElement(BaseMonitoring, {

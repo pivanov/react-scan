@@ -14,35 +14,63 @@ import { addFiberToSet, isValidFiber, updateFiberRenderData } from '../utils';
 import { initPerformanceMonitoring } from './performance';
 import { getSession } from './utils';
 import { flush } from './network';
+import { computeRoute } from './params/utils';
 
 // max retries before the set of components do not get reported (avoid memory leaks of the set of fibers stored on the component aggregation)
 const MAX_RETRIES_BEFORE_COMPONENT_GC = 7;
 
+export interface MonitoringProps {
+  url?: string;
+  apiKey: string;
+
+  // For Session and Interaction
+  path?: string | null; // pathname (i.e /foo/2/bar/3)
+  route?: string | null; // computed from path and params (i.e /foo/:fooId/bar/:barId)
+
+  // Only used / should be provided to compute the route when using Monitoring without supported framework
+  params?: Record<string, string>;
+
+  // Tracking regressions across commits and branches
+  commit?: string | null;
+  branch?: string | null;
+}
+
+export type MonitoringWithoutRouteProps = Omit<
+  MonitoringProps,
+  'route' | 'path'
+>;
+
 export const Monitoring = ({
   url,
   apiKey,
-  path,
-  route,
-}: { url?: string; apiKey: string } & {
-  // todo: ask for path + params so we can compute route for them
-  path: string;
-  route: string | null;
-}) => {
+  params,
+  path = null, // path passed down would be reactive
+  route = null,
+  commit = null,
+  branch = null,
+}: MonitoringProps) => {
   if (!apiKey)
     throw new Error('Please provide a valid API key for React Scan monitoring');
   url ??= 'https://monitoring.react-scan.com/api/v1/ingest';
 
   Store.monitor.value ??= {
     pendingRequests: 0,
+    interactions: [],
+    session: getSession({ commit, branch }).catch(() => null),
     url,
     apiKey,
-    interactions: [],
-    session: getSession().catch(() => null),
     route,
-    path,
+    commit,
+    branch,
   };
-  Store.monitor.value.route = route;
-  Store.monitor.value.path = path;
+
+  // When using Monitoring without framework, we need to compute the route from the path and params
+  if (!route && path && params) {
+    Store.monitor.value.route = computeRoute(path, params);
+  } else {
+    Store.monitor.value.route =
+      route ?? path ?? new URL(window.location.toString()).pathname; // this is inaccurate on vanilla react if the path is not provided but used for session route
+  }
 
   useEffect(() => {
     scanMonitoring({

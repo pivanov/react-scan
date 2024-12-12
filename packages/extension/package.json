@@ -6,6 +6,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "vite build",
+    "postbuild": "node ../../scripts/version-warning.mjs",
     "dev": "pnpm dev:chrome",
     "dev:chrome": "cross-env BROWSER=chrome vite",
     "dev:firefox": "cross-env BROWSER=firefox vite",
