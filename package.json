@@ -2,12 +2,12 @@
   "name": "root",
   "private": true,
   "scripts": {
-    "build": "WORKSPACE_BUILD=true pnpm --parallel --filter=!extension build && node scripts/version-warning.mjs",
-    "version-warning": "node scripts/version-warning.mjs",
-    "dev": "pnpm --parallel --filter=!extension dev",
-    "pack": "pnpm --parallel --filter=!extension pack",
+    "build": "WORKSPACE_BUILD=true pnpm --parallel build",
+    "postbuild": "node scripts/version-warning.mjs",
+    "dev": "pnpm --parallel dev",
+    "pack": "pnpm --parallel pack",
     "pack:bump": "pnpm --filter scan pack:bump",
-    "lint": "pnpm --parallel --filter=!extension lint",
+    "lint": "pnpm --parallel lint",
     "prettier": "prettier --write packages/*",
     "eslint:fix": "eslint --fix packages/*"
   },

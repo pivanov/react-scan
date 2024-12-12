@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { signal, useSignalEffect, type Signal } from '@preact/signals';
 import { render } from 'preact';
 import { cn, throttle } from '@web-utils/helpers';
-import { ReactScanInternals, setOptions, Store } from '../../index';
+import {
+  // ReactScanInternals,
+  setOptions,
+  Store
+} from '../../index';
 import {
   INSPECT_TOGGLE_ID,
   type States,
@@ -24,25 +28,25 @@ const saveCornerPosition = (corner: Corner) => {
   localStorage.setItem(CORNER_KEY, corner);
 };
 
-// Update initial position signals
-const toolbarX = signal(
-  parseInt(
-    typeof window !== 'undefined'
-      ? localStorage.getItem('react-scan-toolbar-x') ?? '0'
-      : '0',
-  ),
-);
+// // Update initial position signals
+// const toolbarX = signal(
+//   parseInt(
+//     typeof window !== 'undefined'
+//       ? localStorage.getItem('react-scan-toolbar-x') ?? '0'
+//       : '0',
+//   ),
+// );
 
-const toolbarY = signal(
-  parseInt(
-    typeof window !== 'undefined'
-      ? localStorage.getItem('react-scan-toolbar-y') ?? '0'
-      : '0',
-  ),
-);
+// const toolbarY = signal(
+//   parseInt(
+//     typeof window !== 'undefined'
+//       ? localStorage.getItem('react-scan-toolbar-y') ?? '0'
+//       : '0',
+//   ),
+// );
 
-const isDragging = signal(false);
-const isResizing = signal(false);
+// const isDragging = signal(false);
+// const isResizing = signal(false);
 
 // Separate references for resizing and dragging
 const initialWidthRef = { current: 0 }; // Used only for resizing

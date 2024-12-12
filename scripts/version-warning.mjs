@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import boxen from 'boxen';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
-import { readFileSync, readdirSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import boxen from 'boxen';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,20 +34,24 @@ function getWorkspacePackages() {
 
   try {
     const dirs = readdirSync(packagesDir, { withFileTypes: true })
-      .filter(dirent => dirent.isDirectory() && dirent.name !== 'extension');
+      .filter(dirent => dirent.isDirectory());
 
     for (const dir of dirs) {
       const pkgPath = resolve(packagesDir, dir.name, 'package.json');
       try {
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-        packages[pkg.name] = pkg.version;
+        if (pkg.version) {
+          packages[pkg.name] = pkg.version;
+        }
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.error(`Error reading ${dir.name}/package.json:`, err);
       }
     }
 
     return packages;
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Error reading packages directory:', err);
     process.exit(1);
   }
@@ -78,14 +82,17 @@ function getPackageInfo() {
 const pkgInfo = getPackageInfo();
 
 const message = pkgInfo.versions
-  ? `${styles.text(MESSAGES.workspace.text)}\n\n` +
-  `${styles.header(MESSAGES.workspace.header)}\n` +
-  Object.entries(pkgInfo.versions)
-    .map(([pkg, version]) => `${styles.dim(pkg.padEnd(12))}${styles.version(`v${version}`)}`)
+  ? `${styles.text(MESSAGES.workspace.text)}\n\n${styles.header(MESSAGES.workspace.header)}\n${Object.entries(pkgInfo.versions).sort(([a], [b]) => a.localeCompare(b))
+    .map(([pkg, version], index, array) => {
+      const prevPkg = index > 0 ? array[index - 1][0] : '';
+      const needsSpace = prevPkg.startsWith('@') && pkg === 'react-scan';
+      return `${needsSpace ? '\n' : ''}${styles.dim(pkg.padEnd(32))}${styles.version(`v${version}`)}`;
+    })
     .join('\n')
-  : `${styles.text(MESSAGES.package.text)}\n\n` +
-  `${styles.dim(pkgInfo.name.padEnd(12))}${styles.version(`v${pkgInfo.version}`)}`;
+  }`
+  : `${styles.text(MESSAGES.package.text)}\n\n${styles.dim(pkgInfo.name.padEnd(32))}${styles.version(`v${pkgInfo.version}`)}`;
 
+// eslint-disable-next-line no-console
 console.log(boxen(message, {
   padding: 1,
   margin: 1,
