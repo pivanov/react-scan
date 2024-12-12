@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { signal, useSignalEffect, type Signal } from '@preact/signals';
 import { render } from 'preact';
+import { cn, throttle } from '@web-utils/helpers';
 import { ReactScanInternals, setOptions, Store } from '../../index';
-import { cn } from '../utils';
-import { throttle } from './utils';
 import {
   INSPECT_TOGGLE_ID,
   type States,
 } from './inspect-element/inspect-state-machine';
 import { getNearestFiberFromElement } from './inspect-element/utils';
-import { RenderPropsAndState } from './components/scan-header';
 import { Icon } from './components/icon';
+import { Widget } from './components/widget';
+import { Header } from './components/widget/header';
 
 const isSoundOnSignal = signal(false);
 
@@ -584,7 +584,7 @@ export const Toolbar = ({
           'box-shadow-[0_4px_12px_rgba(0,0,0,0.2)]',
         )}
       >
-        <RenderPropsAndState />
+        <Header />
 
         <div
           id="react-scan-props"
@@ -600,7 +600,7 @@ export const Toolbar = ({
           {/* Inject props content here if needed */}
         </div>
 
-        <div className="flex items-stretch min-h-9 max-h-9 w-full">
+        <div className="flex max-h-9 min-h-9 w-full items-stretch">
           <button
             id={INSPECT_TOGGLE_ID}
             title="Inspect element"
@@ -654,7 +654,7 @@ export const Toolbar = ({
           >
             {
               focusActive && (
-                <div className="flex-1 flex items-stretch justify-center">
+                <div className="flex flex-1 items-stretch justify-center">
                   <button
                     id="react-scan-previous-focus"
                     title="Previous element"
@@ -696,7 +696,7 @@ export const Toolbar = ({
             'top-0',
             'bottom-0',
             'w-1',
-            'cursor-ew-resize',
+            // 'cursor-ew-resize',
             {
               'hidden': !focusActive,
             }
@@ -713,6 +713,7 @@ export const createToolbar = (shadow: ShadowRoot) => {
   }
 
   const ToolbarWrapper = () => (
+    <>
     <Toolbar
       inspectState={Store.inspectState}
       isPaused={ReactScanInternals.instrumentation?.isPaused!}
@@ -722,6 +723,8 @@ export const createToolbar = (shadow: ShadowRoot) => {
       isDragging={isDragging}
       isResizing={isResizing}
     />
+      <Widget />
+    </>
   );
 
   render(<ToolbarWrapper />, shadow);

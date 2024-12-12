@@ -1,4 +1,13 @@
+import {
+  type ClassValue,
+  clsx,
+} from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import { type PendingOutline } from './outline';
+
+export const cn = (...inputs: Array<ClassValue>): string => {
+  return twMerge(clsx(inputs));
+};
 
 export const onIdle = (callback: () => void) => {
   if ('scheduler' in globalThis) {
@@ -52,5 +61,24 @@ export const tryOrElse = <T, E>(cb: () => T, val: E) => {
     return cb();
   } catch (e) {
     return val;
+  }
+};
+
+export const readLocalStorage = <T>(storageKey: string): T | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = window.localStorage.getItem(storageKey);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveLocalStorage = <T>(storageKey: string, state: T): | void => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    // Silently fail
   }
 };

@@ -4,8 +4,8 @@ import {
   firefox,
   webkit,
   devices,
-  type Browser,
-  type BrowserContext,
+  Browser,
+  BrowserContext,
 } from 'playwright';
 import mri from 'mri';
 import { intro, confirm, isCancel, cancel, spinner } from '@clack/prompts';

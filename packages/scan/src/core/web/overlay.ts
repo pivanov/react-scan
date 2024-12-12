@@ -1,4 +1,4 @@
-import { recalcOutlines } from './outline';
+import { recalcOutlines } from './utils/outline';
 
 export const initReactScanOverlay = () => {
   // Get the shadow root from our container

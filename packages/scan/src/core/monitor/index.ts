@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import { useEffect } from 'preact/hooks';
 import { scan, Store } from '..';
 import { initPerformanceMonitoring } from './performance';
 import { getSession } from './utils';
@@ -31,7 +31,7 @@ export const BaseMonitor = ({
   Store.monitor.value.route = route;
   Store.monitor.value.path = path;
 
-  React.useEffect(() => {
+  useEffect(() => {
     scan({
       enabled: true,
       showToolbar: false,
@@ -68,7 +68,7 @@ export const Monitoring = ({
   Store.monitor.value.route = route;
   Store.monitor.value.path = path;
 
-  React.useEffect(() => {
+  useEffect(() => {
     scan({
       enabled: true,
       showToolbar: false,

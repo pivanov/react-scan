@@ -9,6 +9,13 @@ export default {
       fontFamily: {
         mono: ['Menlo', 'Consolas', 'Monaco', 'Liberation Mono', 'Lucida Console', 'monospace'],
       },
+      cursor: {
+        'nwse-resize': 'nwse-resize',
+        'nesw-resize': 'nesw-resize',
+        'ns-resize': 'ns-resize',
+        'ew-resize': 'ew-resize',
+        'move': 'move',
+      },
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0' },
@@ -36,6 +43,13 @@ export default {
       },
     },
   },
+  safelist: [
+    'cursor-nwse-resize',
+    'cursor-nesw-resize',
+    'cursor-ns-resize',
+    'cursor-ew-resize',
+    'cursor-move'
+  ],
   plugins: [
     ({ addUtilities }) => {
       const newUtilities = {

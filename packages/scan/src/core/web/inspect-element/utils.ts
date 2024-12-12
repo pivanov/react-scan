@@ -10,7 +10,7 @@ import {
   isCompositeFiber,
 } from 'bippy';
 import { ReactScanInternals, Store } from '../../index';
-import { getRect } from '../outline';
+import { getRect } from '../utils/outline';
 
 interface OverrideMethods {
   overrideProps: ((fiber: Fiber, path: Array<string>, value: any) => void) | null;

@@ -8,28 +8,28 @@ import {
   isCompositeFiber,
   traverseFiber,
 } from 'bippy';
-import styles from './web/assets/css/styles.css';
-import { createInstrumentation, type Render } from './instrumentation';
 import {
   type ActiveOutline,
   flushOutlines,
   getOutline,
   type PendingOutline,
-} from './web/outline';
-import { logIntro } from './web/log';
-import { createPerfObserver } from './web/perf-observer';
-import { initReactScanOverlay } from './web/overlay';
+} from '@web-utils/outline';
+import { logIntro } from '@web-utils/log';
+import { createPerfObserver } from '@web-utils/perf-observer';
 import {
   createInspectElementStateMachine,
   type States,
-} from './web/inspect-element/inspect-state-machine';
+} from '@web-inspect-element/inspect-state-machine';
+import { playGeigerClickSound } from '@web-utils/geiger';
+import { ICONS } from '@web-assets/svgs/svgs';
+import { createInstrumentation, type Render } from './instrumentation';
+import styles from './web/assets/css/styles.css';
+import { initReactScanOverlay } from './web/overlay';
 import { createToolbar } from './web/toolbar';
 import { flush } from './monitor/network';
 import type { InternalInteraction } from './monitor/types';
 import { type getSession } from './monitor/utils';
 import { addFiberToSet } from './utils';
-import { playGeigerClickSound } from './web/geiger';
-import { ICONS } from './web/assets/svgs/svgs';
 
 export interface Options {
   /**

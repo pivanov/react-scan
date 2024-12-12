@@ -1,4 +1,4 @@
-import { onIdle } from '../web/utils';
+import { onIdle } from '../web/utils/helpers';
 import { isSSR } from './constants';
 import { Device, type Session } from './types';
 
@@ -93,14 +93,14 @@ export const getSession = async () => {
    */
   // @ts-expect-error - deviceMemory is still experimental
   const mem = navigator.deviceMemory; // GiB ram
-  // eslint-disable-next-line @typescript-eslint/no-misused-promises
+   
 
   const gpuRendererPromise = new Promise<string | null>((resolve) => {
     onIdle(() => {
       resolve(getGpuRenderer());
     });
   });
- 
+
   const session = {
     id,
     url,

@@ -1,9 +1,9 @@
 import { type Fiber } from 'react-reconciler';
 import { getNearestHostFiber } from 'bippy';
-import type { Render } from '../instrumentation';
-import { ReactScanInternals } from '../index';
-import { getLabelText } from '../utils';
-import { isOutlineUnstable, throttle } from './utils';
+import type { Render } from '../../instrumentation';
+import { ReactScanInternals } from '../../index';
+import { getLabelText } from '../../utils';
+import { isOutlineUnstable, throttle } from './helpers';
 
 export interface PendingOutline {
   rect: DOMRect;

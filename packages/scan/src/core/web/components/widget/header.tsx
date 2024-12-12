@@ -1,11 +1,12 @@
 import { useRef, useEffect, useCallback, useState } from "preact/hooks";
 import { getDisplayName } from 'bippy';
+import { cn } from "@web-utils/helpers";
 import { Store } from "../../../..";
 import { getCompositeComponentFromElement, getOverrideMethods } from "../../inspect-element/utils";
 import { replayComponent } from "../../inspect-element/view-state";
 import { Icon } from "../icon";
 
-export const RenderPropsAndState = () => {
+export const Header = () => {
   const inspectState = Store.inspectState.value;
   const refComponentName = useRef<HTMLSpanElement>(null);
   const refMetrics = useRef<HTMLSpanElement>(null);
@@ -111,7 +112,15 @@ export const RenderPropsAndState = () => {
   const canEdit = !!overrideProps;
 
   return (
-    <div className="react-scan-header">
+    <div
+      className={cn(
+        "flex",
+        "react-scan-header",
+        {
+          'hidden': inspectState.kind !== 'focused'
+        }
+      )}
+    >
       <div className="react-scan-header-left">
         <span ref={refComponentName} className="react-scan-component-name" />
         <span ref={refMetrics} className="react-scan-metrics with-data-text" />

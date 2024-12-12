@@ -13,7 +13,7 @@ export interface Options {
 const createBabelPlugin = (): PluginObj => {
   function isComponentName(name: string): boolean {
     return (
-      /^[A-Z$_]|\b(use|create)[A-Z]/i.test(name) &&
+      /^[A-Z$_]|\b(?:use|create)[A-Z]/i.test(name) &&
       !name.endsWith('Context') &&
       !name.endsWith('Provider')
     );
@@ -83,7 +83,7 @@ const createBabelPlugin = (): PluginObj => {
       if (t.isCallExpression(callee)) {
         return path.node.arguments.some(
           (arg: t.Node) =>
-            (t.isIdentifier(arg) && arg.name.match(/^[A-Z]/)) ||
+            (t.isIdentifier(arg) && (/^[A-Z]/.exec(arg.name))) ??
             isReactComponent({ node: arg }),
         );
       }
@@ -190,8 +190,8 @@ const createBabelPlugin = (): PluginObj => {
 export const reactComponentNamePlugin = createUnplugin<Options>(
   (options?: Options) => {
     const filter = createFilter(
-      options?.include || [/\.[jt]sx?$/],
-      options?.exclude || [/node_modules/],
+      options?.include ?? [/\.[jt]sx?$/],
+      options?.exclude ?? [/node_modules/],
     );
 
     return {
@@ -220,8 +220,9 @@ export const reactComponentNamePlugin = createUnplugin<Options>(
             },
           });
 
-          return result ? { code: result.code || '', map: result.map } : null;
+          return result ? { code: result.code ?? '', map: result.map } : null;
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.error('Error processing file:', id, error);
           return null;
         }

@@ -1,31 +1,8 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { defineConfig } from 'tsup';
+import { TsconfigPathsPlugin } from '@esbuild-plugins/tsconfig-paths';
 
 const DIST_PATH = './dist';
-
-const addDirectivesToChunkFiles = async (readPath: string): Promise<void> => {
-  try {
-    const files = await fs.readdir(readPath);
-    for (const file of files) {
-      if (file.endsWith('.mjs') || file.endsWith('.js')) {
-        const filePath = path.join(readPath, file);
-
-        const data = await fs.readFile(filePath, 'utf8');
-
-        const updatedContent = `'use client';\n${data}`;
-
-        await fs.writeFile(filePath, updatedContent, 'utf8');
-
-        // eslint-disable-next-line no-console
-        console.log(`Directive has been added to ${file}`);
-      }
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console -- We need to log the error
-    console.error('Error:', err);
-  }
-};
 
 export default defineConfig([
   {
@@ -53,23 +30,14 @@ export default defineConfig([
     },
     dts: true,
     watch: process.env.NODE_ENV === 'development',
-    async onSuccess() {
-      await Promise.all([
-        addDirectivesToChunkFiles(DIST_PATH),
-        addDirectivesToChunkFiles(`${DIST_PATH}/core/monitor/params`),
-        addDirectivesToChunkFiles(`${DIST_PATH}/core/monitor`),
-      ]);
-    },
     minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
-    env: {
-      NODE_ENV: process.env.NODE_ENV ?? 'development',
-    },
+    globalName: 'ReactScan',
+    noExternal: ['next/navigation'],
     external: [
       'react',
       'react-dom',
       'react-reconciler',
       'next',
-      'next/navigation',
       'react-router',
       'react-router-dom',
       '@remix-run/react',
@@ -79,10 +47,24 @@ export default defineConfig([
     loader: {
       '.css': 'text',
     },
+    esbuildOptions: (options, context) => {
+      options.jsx = 'transform';
+      options.jsxFactory = 'React.createElement';
+      options.jsxFragment = 'React.Fragment';
+
+      // Handle 'use client' directive based on format
+      const directive = '"use client";';
+      if (['esm', 'cjs', 'iife'].includes(context.format)) {
+        options.banner = { js: directive };
+      }
+    },
+    esbuildPlugins: [
+      TsconfigPathsPlugin({ tsconfig: path.resolve(__dirname, './tsconfig.json') })
+    ],
   },
   {
     entry: ['./src/cli.mts'],
-    outDir: './dist',
+    outDir: DIST_PATH,
     splitting: false,
     clean: true,
     sourcemap: false,
@@ -105,7 +87,7 @@ export default defineConfig([
       './src/react-component-name/rolldown.ts',
       './src/react-component-name/rollup.ts',
     ],
-    outDir: './dist/react-component-name',
+    outDir: `${DIST_PATH}/react-component-name`,
     splitting: false,
     sourcemap: false,
     clean: true,

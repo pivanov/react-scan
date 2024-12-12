@@ -3,7 +3,8 @@ import { getReactVersion, loadCss, broadcast } from '../utils/helpers';
 import { CACHE_TTL, CACHE_NAME } from '../utils/constants';
 
 const scriptsToInject = [
-  'https://unpkg.com/react-scan/dist/auto.global.js',
+  // 'https://unpkg.com/react-scan/dist/auto.global.js',
+  'https://127.0.0.1:4000/auto.global.js',
 ];
 
 const injectScript = (scriptURL: string, scriptContent: string) => {

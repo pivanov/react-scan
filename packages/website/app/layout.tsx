@@ -69,15 +69,19 @@ export default function RootLayout({
         <meta name="author" content="Aiden Bai" />
         <meta name="theme-color" content="#8b5cf6" />
         <link rel="canonical" href="https://react-scan.million.dev" />
-        <Script
+        {/* <Script
           strategy="beforeInteractive"
           src="https://unpkg.com/react-scan/dist/auto.global.js"
+        /> */}
+        <Script
+          strategy="beforeInteractive"
+          src="https://127.0.0.1:4000/auto.global.js"
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}
       >
-        <div className="px-8 sm:px-20 pt-20 pb-4 max-w-[700px] mx-auto ">
+        <div className="mx-auto max-w-[700px] px-8 pb-4 pt-20 sm:px-20 ">
           <Header />
           {children}
         </div>

@@ -1,6 +1,6 @@
 import { didFiberRender } from 'bippy';
 import { Store } from '../../index';
-import { throttle } from '../utils';
+import { throttle } from '../utils/helpers';
 import { renderPropsAndState } from './view-state';
 import {
   currentLockIconRect,
@@ -239,7 +239,7 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
               inspectState.hoveredDomElement,
               () => {
                 drawHoverOverlay(
-                  inspectState.hoveredDomElement!,
+                  inspectState.hoveredDomElement,
                   canvas,
                   ctx,
                   'inspecting',

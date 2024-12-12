@@ -11,9 +11,16 @@
     "eslint:fix": "eslint --fix packages/*"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
     "@vercel/style-guide": "^6.0.0",
     "eslint": "^8.57.1",
-    "prettier": "^3.3.3"
+    "eslint-import-resolver-typescript": "^3.7.0",
+    "eslint-plugin-jsonc": "^2.18.2",
+    "eslint-plugin-tailwindcss": "^3.17.5",
+    "prettier": "^3.3.3",
+    "typescript": "5.4.5"
   },
   "packageManager": "pnpm@9.1.0",
   "dependencies": {
