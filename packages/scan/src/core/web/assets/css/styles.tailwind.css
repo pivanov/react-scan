@@ -94,7 +94,6 @@ button {
   transition: opacity 150ms ease;
   position: relative;
   overflow: hidden;
-  isolation: isolate;
 }
 
 .react-scan-close-button {

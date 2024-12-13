@@ -35,6 +35,23 @@ export const throttle = <T extends (...args: Array<any>) => any>(
   };
 };
 
+export const debounce = <T extends (...args: Array<any>) => void>(
+  fn: T,
+  delay: number
+) => {
+  let timeoutId: number;
+
+  const debounced = (...args: Parameters<T>) => {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => fn(...args), delay);
+  };
+
+  debounced.cancel = () => window.clearTimeout(timeoutId);
+
+  return debounced;
+}
+
+
 export const isOutlineUnstable = (outline: PendingOutline) => {
   for (let i = 0, len = outline.renders.length; i < len; i++) {
     const render = outline.renders[i];
@@ -65,9 +82,8 @@ export const tryOrElse = <T, E>(cb: () => T, val: E) => {
 };
 
 export const readLocalStorage = <T>(storageKey: string): T | null => {
-  if (typeof window === 'undefined') return null;
   try {
-    const stored = window.localStorage.getItem(storageKey);
+    const stored = localStorage.getItem(storageKey);
     return stored ? JSON.parse(stored) : null;
   } catch {
     return null;

@@ -114,6 +114,7 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
     unsubscribeAll(); // potential optimization: only unSub if inspectStateKind transitioned
     const unSub = (() => {
       const inspectState = Store.inspectState.value;
+      console.log('inspectState', inspectState.kind);
       switch (inspectState.kind) {
         case 'uninitialized': {
           return;
@@ -186,6 +187,7 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
 
           const pointerdown = (e: MouseEvent) => {
             e.stopPropagation();
+            console.log('pointerdown');
 
             eventCatcher.style.pointerEvents = 'none';
             const el =

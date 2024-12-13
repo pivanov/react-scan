@@ -1,149 +1,326 @@
-import { type RefObject, type JSX } from 'preact';
-import { useCallback } from "preact/hooks";
-import { cn, saveLocalStorage } from '@web-utils/helpers';
-import { signalWidgetState } from '../../state';
-import { LOCALSTORAGE_KEY, MIN_SIZE, SAFE_AREA } from './constants';
+import { type JSX } from 'preact';
+import { useCallback, useEffect } from "preact/hooks";
+import { memo } from 'preact/compat';
+import { cn, saveLocalStorage, debounce } from '@web-utils/helpers';
+import { Store } from 'src/core';
+import { Icon } from '@web-components/icon';
+import { signalWidget, signalRefContainer, updateDimensions } from '../../state';
+import { type ResizeHandleProps } from './types';
+import { LOCALSTORAGE_KEY, MIN_SIZE } from './constants';
+import {
+  calculatePosition,
+  getInteractionClasses,
+  getPositionClasses,
+  calculateNewSizeAndPosition,
+  getHandleVisibility,
+  getWindowDimensions,
+  getOppositeCorner,
+  calculateDimensions,
+  getClosestCorner
+} from './helpers';
 
-interface ResizeHandleProps {
-  refContainer: RefObject<HTMLDivElement>;
-  position: string;
-  direction: string;
-  isLine?: boolean;
-}
+export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
+  const isLine = !position.includes('-');
+  const { dimensions } = signalWidget.value;
+  const { isFullWidth, isFullHeight } = dimensions;
+  const currentCorner = signalWidget.value.corner;
 
-export const ResizeHandle = (props: ResizeHandleProps) => {
-  const {
-    refContainer,
-    position,
-    direction,
-    isLine = false
-  } = props;
+  const getVisibilityClass = useCallback(() =>
+    getHandleVisibility(position, isLine, currentCorner, isFullWidth, isFullHeight),
+    [dimensions, position, isLine, isFullWidth, isFullHeight]
+  );
 
-  // Modified resize handler
-  const handleResize = useCallback((e: JSX.TargetedMouseEvent<HTMLDivElement>, direction: string) => {
-    if (!refContainer.current) return;
+  const handleDoubleClick = useCallback((e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-    refContainer.current.style.transition = 'none';
+    if (!signalRefContainer.value) return;
 
-    const handleMouseMove = (e: globalThis.MouseEvent) => {
-      if (!refContainer.current) return;
+    const { maxWidth, maxHeight, isFullWidth, isFullHeight } = getWindowDimensions();
+    const currentWidth = signalWidget.value.size.width;
+    const currentHeight = signalWidget.value.size.height;
+    const currentCorner = signalWidget.value.corner;
+    const isCurrentFullWidth = isFullWidth(currentWidth);
+    const isCurrentFullHeight = isFullHeight(currentHeight);
+    const isFullScreen = isCurrentFullWidth && isCurrentFullHeight;
 
-      const rect = refContainer.current.getBoundingClientRect();
-      let newWidth = signalWidgetState.value.size.width;
-      let newHeight = signalWidgetState.value.size.height;
-      let newX = signalWidgetState.value.position.x;
-      let newY = signalWidgetState.value.position.y;
+    // Disable corner double-clicks in half-maximized states
+    if (!isLine && ((isCurrentFullWidth && !isCurrentFullHeight) || (!isCurrentFullWidth && isCurrentFullHeight))) {
+      return;
+    }
 
-      // Calculate max dimensions (half of available space)
-      const maxWidth = Math.min((window.innerWidth - (SAFE_AREA * 2)) / 2);
-      const maxHeight = Math.min((window.innerHeight - (SAFE_AREA * 2)) / 2);
+    let newWidth = currentWidth;
+    let newHeight = currentHeight;
+    const newCorner = getOppositeCorner(
+      position,
+      currentCorner,
+      isFullScreen,
+      isCurrentFullWidth,
+      isCurrentFullHeight
+    );
 
-      if (direction.includes('right')) {
-        newWidth = Math.max(
-          MIN_SIZE.width,
-          Math.min(e.clientX - rect.left, maxWidth)
-        );
-      } else if (direction.includes('left')) {
-        const rightEdge = rect.right;
-        newWidth = Math.max(
-          MIN_SIZE.width,
-          Math.min(rightEdge - e.clientX, maxWidth)
-        );
-        newX = Math.max(SAFE_AREA, rightEdge - newWidth);
+    if (isLine) {
+      if (position === 'left' || position === 'right') {
+        newWidth = isCurrentFullWidth ? MIN_SIZE.width : maxWidth;
+      } else {
+        newHeight = isCurrentFullHeight ? MIN_SIZE.height : maxHeight;
       }
+    } else if (isFullScreen) {
+        newWidth = MIN_SIZE.width;
+      newHeight = MIN_SIZE.height;
+    } else {
+      newWidth = maxWidth;
+      newHeight = maxHeight;
+    }
 
-      if (direction.includes('bottom')) {
-        newHeight = Math.max(
-          MIN_SIZE.height,
-          Math.min(e.clientY - rect.top, maxHeight)
+    const container = signalRefContainer.value;
+    const newPosition = calculatePosition(newCorner, newWidth, newHeight);
+
+    container.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+    container.style.width = `${newWidth}px`;
+    container.style.height = `${newHeight}px`;
+    container.style.transform = `translate(${newPosition.x}px, ${newPosition.y}px)`;
+
+    const newDimensions = calculateDimensions({ width: newWidth, height: newHeight }, newCorner);
+    const newState = {
+      ...signalWidget.value,
+      isResizing: true,
+      corner: newCorner,
+      size: { width: newWidth, height: newHeight },
+      position: newPosition,
+      lastExpandedWidth: newWidth,
+      lastExpandedHeight: newHeight,
+      dimensions: newDimensions
+    };
+    signalWidget.value = newState;
+
+    const onTransitionEnd = () => {
+      container.style.transition = '';
+      updateDimensions();
+      container.removeEventListener('transitionend', onTransitionEnd);
+    };
+    container.addEventListener('transitionend', onTransitionEnd);
+
+    saveLocalStorage(LOCALSTORAGE_KEY, {
+      corner: newCorner,
+      size: { width: newWidth, height: newHeight }
+    });
+  }, [isLine, position]);
+
+  const handleResize = useCallback((e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const container = signalRefContainer.value;
+    if (!container) return;
+
+    // Immediately remove transition at the start of resize
+    container.style.transition = 'none';
+
+    // Cache initial values
+    const initialX = e.clientX;
+    const initialY = e.clientY;
+    const initialWidth = signalWidget.value.size.width;
+    const initialHeight = signalWidget.value.size.height;
+    const initialPosition = signalWidget.value.position;
+
+    let rafId: number | null = null;
+    let isResizing = true;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || rafId) return;
+
+      rafId = requestAnimationFrame(() => {
+        const { newSize, newPosition } = calculateNewSizeAndPosition(
+          position,
+          { width: initialWidth, height: initialHeight },
+          initialPosition,
+          e.clientX - initialX,
+          e.clientY - initialY
         );
-      } else if (direction.includes('top')) {
-        const bottomEdge = rect.bottom;
-        newHeight = Math.max(
-          MIN_SIZE.height,
-          Math.min(bottomEdge - e.clientY, maxHeight)
-        );
-        newY = Math.max(SAFE_AREA, bottomEdge - newHeight);
-      }
 
-      // Ensure we don't exceed viewport bounds
-      if ((newX) + (newWidth) > window.innerWidth - SAFE_AREA) {
-        newWidth = window.innerWidth - (newX) - SAFE_AREA;
-      }
-      if ((newY) + (newHeight) > window.innerHeight - SAFE_AREA) {
-        newHeight = window.innerHeight - (newY) - SAFE_AREA;
-      }
+        // Batch DOM updates
+        container.style.width = `${newSize.width}px`;
+        container.style.height = `${newSize.height}px`;
+        container.style.transform = `translate(${newPosition.x}px, ${newPosition.y}px)`;
 
-      // Only update DOM and ref state during move
-      refContainer.current.style.width = `${newWidth}px`;
-      refContainer.current.style.height = `${newHeight}px`;
-      refContainer.current.style.transform = `translate(${newX}px, ${newY}px)`;
+        signalWidget.value = {
+          ...signalWidget.value,
+          size: newSize,
+          position: newPosition,
+          isResizing: true
+        };
 
-      // Update ref state without storage
-      signalWidgetState.value.position = { x: newX, y: newY };
-      signalWidgetState.value.size = { width: newWidth, height: newHeight };
-      signalWidgetState.value.lastExpandedWidth = newWidth;
-      signalWidgetState.value.lastExpandedHeight = newHeight;
+        rafId = null;
+      });
     };
 
-    // Save only on mouseup
     const handleMouseUp = () => {
-      if (!refContainer.current) return;
-
-      // Store final dimensions
-      saveLocalStorage(LOCALSTORAGE_KEY, {
-        corner: signalWidgetState.value.corner,
-        size: {
-          width: signalWidgetState.value.lastExpandedWidth,
-          height: signalWidgetState.value.lastExpandedHeight
-        }
-      });
+      isResizing = false;
+      if (rafId) cancelAnimationFrame(rafId);
 
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+
+      requestAnimationFrame(() => {
+        const container = signalRefContainer.value;
+        if (!container) return;
+
+        // Get current position and window dimensions
+        const { x, y } = signalWidget.value.position;
+
+        // Find closest corner based on current position
+        const closestCorner = getClosestCorner(
+          { x, y },
+        );
+
+        // Calculate new position based on the closest corner
+        const newPosition = calculatePosition(
+          closestCorner,
+          signalWidget.value.size.width,
+          signalWidget.value.size.height
+        );
+
+        // Apply smooth transition
+        container.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+        container.style.transform = `translate(${newPosition.x}px, ${newPosition.y}px)`;
+
+        // Update state
+        signalWidget.value = {
+          ...signalWidget.value,
+          corner: closestCorner,
+          position: newPosition,
+          isResizing: false,
+          dimensions: calculateDimensions(signalWidget.value.size, closestCorner)
+        };
+
+        queueMicrotask(() => {
+          saveLocalStorage(LOCALSTORAGE_KEY, {
+            corner: closestCorner,
+            size: signalWidget.value.size
+          });
+        });
+
+        updateDimensions();
+      });
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+  }, [position]);
+
+  // Window resize handler
+  useEffect(() => {
+    const handleWindowResize = debounce(() => {
+      if (!signalRefContainer.value) return;
+
+      const isInspectFocused = Store.inspectState.value.kind === 'focused';
+
+      if (isInspectFocused) {
+        const { dimensions, size } = signalWidget.value;
+        const { isFullWidth, isFullHeight } = dimensions;
+
+        if (isFullWidth || isFullHeight) {
+          const { maxWidth, maxHeight } = getWindowDimensions();
+
+          const newSize = {
+            width: isFullWidth ? maxWidth : size.width,
+            height: isFullHeight ? maxHeight : size.height
+          };
+
+          signalWidget.value = {
+            ...signalWidget.value,
+            size: newSize,
+            currentWidth: newSize.width,
+            currentHeight: newSize.height
+          };
+        }
+
+        updateDimensions();
+      }
+    }, 16);
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+      handleWindowResize.cancel();
+    };
   }, []);
 
   return (
     <div
+      data-direction={position}
+      onMouseDown={handleResize}
+      onDblClick={handleDoubleClick}
       className={cn(
-        "absolute",
-        position,
-        isLine ? "bg-transparent hover:bg-blue-500/50" : "bg-blue-500 hover:bg-blue-600",
-        "transition-colors",
-        "select-none",
-        "z-50",
-        "pointer-events-auto",
-        {
-          // Squares
-          'w-3 h-3': !isLine,
-          'rounded-tl': !isLine && (direction.includes('left') || direction.includes('top')),
-          'rounded-tr': !isLine && (direction.includes('right') || direction.includes('top')),
-          'rounded-bl': !isLine && (direction.includes('left') || direction.includes('bottom')),
-          'rounded-br': !isLine && (direction.includes('right') || direction.includes('bottom')),
-          // Cursors for squares
-          'cursor-nwse-resize': !isLine && (direction.includes('bottom-right') || direction.includes('top-left')),
-          'cursor-nesw-resize': !isLine && (direction.includes('bottom-left') || direction.includes('top-right')),
-          // Lines
-          'w-1 h-full': isLine && (direction.includes('left') || direction.includes('right')),
-          'w-full h-1': isLine && (direction.includes('top') || direction.includes('bottom')),
-          'rounded-l-md': isLine && (direction.includes('left') || direction.includes('right')),
-          'rounded-r-md': isLine && (direction.includes('left') || direction.includes('right')),
-          'rounded-t-md': isLine && (direction.includes('top') || direction.includes('bottom')),
-          'rounded-b-md': isLine && (direction.includes('top') || direction.includes('bottom')),
-          // Cursors for lines
-          'cursor-ew-resize': isLine && (direction.includes('left') || direction.includes('right')),
-          'cursor-ns-resize': isLine && (direction.includes('top') || direction.includes('bottom')),
-        }
+        "flex items-center justify-center",
+        "resize-handle absolute",
+        "group",
+        'overflow-hidden',
+        "transition-opacity select-none z-50 pointer-events-auto",
+        getPositionClasses(position),
+        getInteractionClasses(position, isLine, getVisibilityClass())
       )}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handleResize(e, direction);
-      }}
-    />
+    >
+      {
+        isLine ?
+          (
+            <span
+              className={cn(
+                "absolute",
+                "opacity-0 group-hover:opacity-100 group-active:opacity-100",
+                "transition-[transform, opacity] duration-300",
+                "delay-500 group-hover:delay-0 group-active:delay-0",
+                {
+                  "translate-y-full group-hover:-translate-y-1.5 group-active:-translate-y-1.5":
+                    position === 'top',
+                  "-translate-x-full group-hover:translate-x-1.5 group-active:translate-x-1.5":
+                    position === 'right',
+                  "-translate-y-full group-hover:translate-y-1.5 group-active:translate-y-1.5":
+                    position === 'bottom',
+                  "translate-x-full group-hover:-translate-x-1.5 group-active:-translate-x-1.5":
+                    position === 'left',
+                }
+              )}
+            >
+              <Icon
+                className='text-[#7b51c8]'
+                name={position === 'left' || position === 'right'
+                  ? 'icon-grip-vertical'
+                  : 'icon-grip-horizontal'
+                }
+              />
+            </span>
+          )
+          : (
+            <span
+              className={cn(
+                "absolute w-6 h-6",
+                "opacity-0 group-hover:opacity-100 group-active:opacity-100",
+                "transition-[transform,opacity] duration-300",
+                "delay-500 group-hover:delay-0 group-active:delay-0",
+                "before:content-[''] before:absolute",
+                "before:w-0 before:h-0",
+                "before:border-[5px] before:border-transparent before:border-t-[#7b51c8]",
+                {
+                  "before:top-0 before:left-0 before:rotate-[135deg] translate-x-2 translate-y-2":
+                    position === 'top-left',
+
+                  "before:top-0 before:right-0 before:rotate-[225deg] -translate-x-2 translate-y-2":
+                    position === 'top-right',
+
+                  "before:bottom-0 before:left-0 before:rotate-45 translate-x-2 -translate-y-2":
+                    position === 'bottom-left',
+
+                  "before:bottom-0 before:right-0 before:-rotate-45 -translate-x-2 -translate-y-2":
+                    position === 'bottom-right',
+                },
+                "group-hover:translate-x-0 group-hover:translate-y-0",
+                "group-active:translate-x-0 group-active:translate-y-0"
+              )}
+            />
+          )
+      }
+    </div>
   );
-};
+}, (prevProps, nextProps) => prevProps.position === nextProps.position);

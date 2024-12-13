@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { signal, useSignalEffect, type Signal } from '@preact/signals';
+import {
+  // signal,
+  useSignalEffect,
+  type Signal
+} from '@preact/signals';
 import { render } from 'preact';
 import { cn, throttle } from '@web-utils/helpers';
 import {
@@ -16,7 +20,7 @@ import { Icon } from './components/icon';
 import { Widget } from './components/widget';
 import { Header } from './components/widget/header';
 
-const isSoundOnSignal = signal(false);
+// const isSoundOnSignal = signal(false);
 
 // Sizing and positioning signals
 const CORNER_KEY = 'react-scan-toolbar-corner';
@@ -361,9 +365,9 @@ export const Toolbar = ({
   }, [Store.inspectState.value]);
 
   const onSoundToggle = useCallback(() => {
-    isSoundOnSignal.value = !isSoundOnSignal.value;
-    setOptions({ playSound: isSoundOnSignal.value });
-  }, [isSoundOnSignal.value]);
+    isSoundOn.value = !isSoundOn.value;
+    setOptions({ playSound: isSoundOn.value });
+  }, [isSoundOn.value]);
 
   const onNextFocus = useCallback(() => {
     const currentState = Store.inspectState.value;
@@ -691,7 +695,6 @@ export const Toolbar = ({
             'top-0',
             'bottom-0',
             'w-1',
-            // 'cursor-ew-resize',
             {
               'hidden': !focusActive,
             }

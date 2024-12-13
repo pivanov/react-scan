@@ -306,7 +306,6 @@ export const start = () => {
   const iconSprite = new DOMParser().parseFromString(ICONS, 'image/svg+xml').documentElement;
   shadow.appendChild(iconSprite);
 
-
   // add toolbar root
   const root = document.createElement('div');
   root.id = 'react-scan-toolbar-root';
@@ -400,6 +399,22 @@ export const start = () => {
   if (options.showToolbar) {
     createToolbar(shadow);
   }
+
+  // Add this right after creating the container
+  container.setAttribute('part', 'scan-root');
+
+  // Add this before creating the Shadow DOM
+  const mainStyles = document.createElement('style');
+  mainStyles.textContent = `
+    html[data-theme="light"] react-scan-root::part(scan-root) {
+      --icon-color: rgba(0, 0, 0, 0.8);
+    }
+
+    html[data-theme="dark"] react-scan-root::part(scan-root) {
+      --icon-color: rgba(255, 255, 255, 0.8);
+    }
+  `;
+  document.head.appendChild(mainStyles);
 };
 
 export const withScan = <T>(

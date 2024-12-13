@@ -10,20 +10,31 @@ export interface Size {
 
 export type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
-// For runtime state
-export interface WidgetState {
-  position: Position;
-  size: Size;
-  corner: Corner;
-  lastExpandedWidth: number;
-  lastExpandedHeight: number;
+export interface ResizeHandleProps {
+  position: Corner | 'top' | 'bottom' | 'left' | 'right';
 }
 
-// For localStorage
-export interface StoredWidgetState {
+// Full widget runtime configuration
+export interface WidgetConfig {
   corner: Corner;
-  size: {
-    width: number;
-    height: number;
+  position: Position;
+  size: Size;
+  lastExpandedWidth: number;
+  lastExpandedHeight: number;
+  dimensions: {
+    isFullWidth: boolean;
+    isFullHeight: boolean;
+    isAtTop: boolean;
+    isAtBottom: boolean;
+    isAtLeft: boolean;
+    isAtRight: boolean;
   };
+  isResizing: boolean;
+  currentWidth: number;
+  currentHeight: number;
+  currentX: number;
+  currentY: number;
 }
+
+// Persistent widget settings
+export type WidgetSettings = Pick<WidgetConfig, 'corner' | 'size'>;

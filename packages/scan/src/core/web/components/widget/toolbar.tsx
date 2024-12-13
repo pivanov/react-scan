@@ -9,7 +9,7 @@ import { Icon } from "../icon";
 const isSoundOnSignal = signal(false);
 
 interface ToolbarProps {
-  refPropContainer: React.RefObject<HTMLDivElement>;
+  refPropContainer: preact.RefObject<HTMLDivElement>;
 }
 
 export const Toolbar = ({ refPropContainer }: ToolbarProps) => {
@@ -39,6 +39,7 @@ export const Toolbar = ({ refPropContainer }: ToolbarProps) => {
 
   const onToggleInspect = useCallback(() => {
     const currentState = Store.inspectState.value;
+
     switch (currentState.kind) {
       case 'inspecting':
         Store.inspectState.value = {
@@ -168,18 +169,18 @@ export const Toolbar = ({ refPropContainer }: ToolbarProps) => {
       </button>
       <button
         id="react-scan-power"
-        title={!isPaused.value ? 'Stop' : 'Start'}
+        title={!isPaused ? 'Stop' : 'Start'}
         onClick={onToggleActive}
         className={cn(
           'flex items-center justify-center',
           'px-3',
           {
-            'text-white': !isPaused.value,
-            'text-[#999]': isPaused.value,
+            'text-white': !isPaused,
+            'text-[#999]': isPaused,
           },
         )}
       >
-        <Icon name={`icon-${isPaused.value ? 'eye-off' : 'eye'}`} />
+        <Icon name={`icon-${isPaused ? 'eye-off' : 'eye'}`} />
       </button>
       <button
         id="react-scan-sound-toggle"
@@ -232,9 +233,7 @@ export const Toolbar = ({ refPropContainer }: ToolbarProps) => {
             </div>
           )
         }
-        <span
-          className="flex items-center whitespace-nowrap px-3 text-sm text-white"
-        >
+        <span className="flex items-center whitespace-nowrap px-3 text-sm text-white">
           react-scan
         </span>
       </div>
