@@ -31,6 +31,7 @@ const DEFAULT_THROTTLE_TIME = 32; // 2 frames
 
 const START_COLOR = { r: 115, g: 97, b: 230 };
 const END_COLOR = { r: 185, g: 49, b: 115 };
+const MONO_FONT = 'Menlo,Consolas,Monaco,Liberation Mono,Lucida Console,monospace';
 
 export const getOutlineKey = (outline: PendingOutline): string => {
   return `${outline.rect.top}-${outline.rect.left}-${outline.rect.width}-${outline.rect.height}`;
@@ -325,7 +326,7 @@ export const fadeOutOutline = (
     ctx.save();
 
     if (text) {
-      ctx.font = `11px Menlo,Consolas,Monaco,Liberation Mono,Lucida Console,monospace`;
+      ctx.font = `11px ${MONO_FONT}`;
       const textMetrics = ctx.measureText(text);
       const textWidth = textMetrics.width;
       const textHeight = 11;

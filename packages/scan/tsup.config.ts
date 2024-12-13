@@ -114,7 +114,7 @@ export default defineConfig([
         addDirectivesToChunkFiles(`${DIST_PATH}/core/monitor`),
       ]);
     },
-    minify: process.env.NODE_ENV === 'production',
+    minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
       NPM_PACKAGE_VERSION: JSON.parse(fs.readFileSync(
@@ -154,7 +154,7 @@ export default defineConfig([
     format: ['cjs'],
     target: 'esnext',
     platform: 'node',
-    minify: process.env.NODE_ENV === 'production',
+    minify: false,
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
@@ -193,7 +193,7 @@ export default defineConfig([
       'vite',
     ],
     dts: true,
-    minify: process.env.NODE_ENV === 'production',
+    minify: false,
     treeshake: true,
     env: {
       NODE_ENV: process.env.NODE_ENV || 'development',
