@@ -67,7 +67,7 @@ export const Monitoring = ({
   // When using Monitoring without framework, we need to compute the route from the path and params
   if (!route && path && params) {
     Store.monitor.value.route = computeRoute(path, params);
-  } else {
+  } else if (typeof window !== 'undefined') {
     Store.monitor.value.route =
       route ?? path ?? new URL(window.location.toString()).pathname; // this is inaccurate on vanilla react if the path is not provided but used for session route
   }
