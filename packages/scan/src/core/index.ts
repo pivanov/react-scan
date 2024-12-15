@@ -244,8 +244,6 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
 
   if (prevRenderData) {
     prevRenderData.renders.push(...renders);
-    // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-    prevRenderData.count += renders.length;
   } else {
     const { selfTime } = getTimings(fiber);
 
@@ -265,8 +263,6 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
 
     if (prevLegacyRenderData) {
       prevLegacyRenderData.renders.push(...renders);
-      // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-      prevLegacyRenderData.count += renders.length;
     } else {
       const { selfTime } = getTimings(fiber);
 

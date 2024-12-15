@@ -77,5 +77,9 @@ module.exports = {
       files: ['*.tsx', '*.ts', '*.js'],
       plugins: ['tailwindcss'],
     },
+    {
+      files: ['*.mts'],
+      parser: '@typescript-eslint/parser',
+    }
   ],
 };
