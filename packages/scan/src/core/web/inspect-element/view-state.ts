@@ -240,6 +240,12 @@ const tryOrElse = <T, E>(cb: () => T, val: E) => {
   }
 };
 
+const isPromise = (value: any): value is Promise<unknown> => {
+  return value &&
+    (value instanceof Promise ||
+      (typeof value === 'object' && 'then' in value));
+};
+
 export const createPropertyElement = (
   componentName: string,
   didRender: boolean,
@@ -267,7 +273,11 @@ export const createPropertyElement = (
     container.className = 'react-scan-property';
 
     const isExpandable =
-      (typeof value === 'object' && value !== null) || Array.isArray(value);
+      !isPromise(value) && (
+        (Array.isArray(value) && value.length > 0) ||
+        (typeof value === 'object' && value !== null && Object.keys(value).length > 0)
+      );
+
     const currentPath = getPath(componentName, section, parentPath, key);
     const prevValue = lastRendered.get(currentPath);
     const isChanged = prevValue !== undefined && prevValue !== value;
@@ -302,7 +312,6 @@ export const createPropertyElement = (
 
       const arrow = document.createElement('span');
       arrow.className = 'react-scan-arrow';
-      arrow.textContent = '▶';
       container.appendChild(arrow);
 
       const contentWrapper = document.createElement('div');
@@ -315,11 +324,10 @@ export const createPropertyElement = (
 
 
       preview.innerHTML = `
-        <span style="width: 8px; display: inline-block"></span>
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
           value,
-        )} react-scan-value with-data-text" data-text='${getValuePreview(value)}'></span>
+        )} react-scan-value truncate">${getValuePreview(value)}</span>
       `;
 
       const content = document.createElement('div');
@@ -333,8 +341,6 @@ export const createPropertyElement = (
 
       if (isExpanded) {
         if (Array.isArray(value)) {
-          const arrayContainer = document.createElement('div');
-          arrayContainer.className = 'react-scan-array-container';
           value.forEach((item, index) => {
             const el = createPropertyElement(
               componentName,
@@ -352,9 +358,8 @@ export const createPropertyElement = (
             if (!el) {
               return;
             }
-            arrayContainer.appendChild(el);
+            content.appendChild(el);
           });
-          content.appendChild(arrayContainer);
         } else {
           Object.entries(value).forEach(([k, v]) => {
             const el = createPropertyElement(
@@ -380,6 +385,7 @@ export const createPropertyElement = (
 
       arrow.addEventListener('click', (e) => {
         e.stopPropagation();
+
         const isExpanding = !container.classList.contains(
           'react-scan-expanded',
         );
@@ -391,8 +397,6 @@ export const createPropertyElement = (
 
           if (!content.hasChildNodes()) {
             if (Array.isArray(value)) {
-              const arrayContainer = document.createElement('div');
-              arrayContainer.className = 'react-scan-array-container';
               value.forEach((item, index) => {
                 const el = createPropertyElement(
                   componentName,
@@ -410,9 +414,8 @@ export const createPropertyElement = (
                 if (!el) {
                   return;
                 }
-                arrayContainer.appendChild(el);
+                content.appendChild(el);
               });
-              content.appendChild(arrayContainer);
             } else {
               Object.entries(value).forEach(([k, v]) => {
                 const el = createPropertyElement(
@@ -447,11 +450,10 @@ export const createPropertyElement = (
       preview.dataset.key = key;
       preview.dataset.section = section;
       preview.innerHTML = `
-        <span style="width: 8px; display: inline-block"></span>
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
           value,
-        )} react-scan-value with-data-text" data-text='${getValuePreview(value)}'></span>
+        )} react-scan-value truncate">${getValuePreview(value)}</span>
       `;
       container.appendChild(preview);
 
@@ -550,7 +552,6 @@ const createCircularReferenceElement = (key: string) => {
   const preview = document.createElement('div');
   preview.className = 'react-scan-preview-line';
   preview.innerHTML = `
-    <span style="width: 8px; display: inline-block"></span>
     <span class="react-scan-key">${key}:&nbsp;</span><span class="react-scan-circular">[Circular Reference]</span>
   `;
   container.appendChild(preview);
@@ -595,7 +596,7 @@ export const getValuePreview = (value: any) => {
       if (keys.length <= 3) {
         return `{${keys.join(', ')}}`;
       }
-      return `{${keys.slice(0, 3).join(', ')}, ...}`;
+      return `{${keys.slice(0, 8).join(', ')}, ...}`;
     }
     default:
       return typeof value;

@@ -223,58 +223,40 @@ export const setOptions = (options: Options) => {
 export const getOptions = () => ReactScanInternals.options;
 
 export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
-  let reportFiber: Fiber;
-  let prevRenderData: RenderData | undefined;
-
-  const currentFiberData = Store.reportData.get(fiber);
-  if (currentFiberData) {
-    reportFiber = fiber;
-    prevRenderData = currentFiberData;
-  } else if (!fiber.alternate) {
-    reportFiber = fiber;
-    prevRenderData = undefined;
-  } else {
-    reportFiber = fiber.alternate;
-    prevRenderData = Store.reportData.get(fiber.alternate);
-  }
-
+  const reportFiber = fiber;
+  const { selfTime } = getTimings(fiber);
   const displayName = getDisplayName(fiber.type);
 
   Store.lastReportTime.value = performance.now();
 
-  if (prevRenderData) {
-    prevRenderData.renders.push(...renders);
-  } else {
-    const { selfTime } = getTimings(fiber);
+  const currentFiberData = Store.reportData.get(reportFiber) ?? {
+    count: 0,
+    time: 0,
+    renders: [],
+    displayName,
+    type: null,
+  };
 
-    const reportData = {
-      count: renders.length,
-      time: selfTime,
-      renders,
-      displayName,
-      type: null,
-    };
+  currentFiberData.count += renders.length;
+  currentFiberData.time += selfTime;
+  currentFiberData.renders = renders;
 
-    Store.reportData.set(reportFiber, reportData);
-  }
+  Store.reportData.set(reportFiber, currentFiberData);
 
   if (displayName && ReactScanInternals.options.value.report) {
-    const prevLegacyRenderData = Store.legacyReportData.get(displayName);
+    const existingLegacyData = Store.legacyReportData.get(displayName) ?? {
+      count: 0,
+      time: 0,
+      renders: [],
+      displayName: null,
+      type: getType(fiber.type) || fiber.type,
+    };
 
-    if (prevLegacyRenderData) {
-      prevLegacyRenderData.renders.push(...renders);
-    } else {
-      const { selfTime } = getTimings(fiber);
+    existingLegacyData.count += renders.length;
+    existingLegacyData.time += selfTime;
+    existingLegacyData.renders = renders;
 
-      const reportData = {
-        count: renders.length,
-        time: selfTime,
-        renders,
-        displayName: null,
-        type: getType(fiber.type) || fiber.type,
-      };
-      Store.legacyReportData.set(displayName, reportData);
-    }
+    Store.legacyReportData.set(displayName, existingLegacyData);
   }
 };
 

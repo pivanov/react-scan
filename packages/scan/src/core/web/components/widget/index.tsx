@@ -1,15 +1,15 @@
 import { type JSX } from 'preact';
 import { useRef, useCallback, useEffect, useMemo } from 'preact/hooks';
-import { cn, debounce, readLocalStorage, saveLocalStorage } from '@web-utils/helpers';
+import { cn, debounce, saveLocalStorage } from '@web-utils/helpers';
 import { getCompositeComponentFromElement } from '@web-inspect-element/utils';
 import { Store } from 'src/core';
 import { signalWidget, signalRefContainer, updateDimensions } from '../../state';
+import { SAFE_AREA, LOCALSTORAGE_KEY } from '../../constants';
 import { Header } from './header';
-import { type WidgetSettings, type Corner } from './types'
-import { MIN_SIZE, SAFE_AREA, LOCALSTORAGE_KEY } from './constants';
+import { type Corner } from './types'
 import Toolbar from './toolbar';
 import { ResizeHandle } from './resize-handle';
-import { calculatePosition, calculateDimensions } from './helpers';
+import { calculatePosition } from './helpers';
 
 export const Widget = () => {
   const inspectState = Store.inspectState.value;
@@ -30,24 +30,10 @@ export const Widget = () => {
     refInitialMinimizedHeight.current = refFooter.current.offsetHeight;
     refInitialMinimizedWidth.current = refContainer.current.offsetWidth;
 
-    const stored = readLocalStorage<WidgetSettings>(LOCALSTORAGE_KEY) ?? {
-      corner: 'top-left' as Corner,
-      size: { width: 300, height: 400 }
-    };
-
-    const newPosition = calculatePosition(
-      stored.corner,
-      refInitialMinimizedWidth.current,
-      refInitialMinimizedHeight.current
-    );
-
     signalWidget.value = {
       ...signalWidget.value,
-      position: newPosition,
-      corner: stored.corner,
-      lastExpandedWidth: stored.size.width,
-      lastExpandedHeight: stored.size.height,
-      size: {
+      dimensions: {
+        ...signalWidget.value.dimensions,
         width: refInitialMinimizedWidth.current,
         height: refInitialMinimizedHeight.current
       }
@@ -60,7 +46,6 @@ export const Widget = () => {
     if (isInspectFocused && inspectState.focusedDomElement) {
       const { parentCompositeFiber } = getCompositeComponentFromElement(inspectState.focusedDomElement);
       if (!parentCompositeFiber) {
-        // @TODO: @pivanov fix this in inspect-state-machine.ts pointerdown
         setTimeout(() => {
           Store.inspectState.value = {
             kind: 'inspect-off',
@@ -75,20 +60,18 @@ export const Widget = () => {
     return true;
   }, [isInspectFocused]);
 
-  const handleMouseDown = useCallback((event: JSX.TargetedMouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('button')) return;
+  const handleMouseDown = useCallback((e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
     if (!refContainer.current) return;
 
-    event.preventDefault();
+    e.preventDefault();
 
     const container = refContainer.current;
-    const { size } = signalWidget.value;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const initialX = signalWidget.value.position.x;
-    const initialY = signalWidget.value.position.y;
-
-    container.style.transition = 'none';
+    const { dimensions } = signalWidget.value;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialX = dimensions.position.x;
+    const initialY = dimensions.position.y;
 
     let currentX = initialX;
     let currentY = initialY;
@@ -96,6 +79,8 @@ export const Widget = () => {
 
     const handleMouseMove = (e: globalThis.MouseEvent) => {
       if (rafId) return;
+
+      container.style.transition = 'none';
 
       rafId = requestAnimationFrame(() => {
         const deltaX = e.clientX - startX;
@@ -116,29 +101,30 @@ export const Widget = () => {
       requestAnimationFrame(() => {
         container.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
 
-        const newCorner = `${currentY < window.innerHeight / 2 ? 'top' : 'bottom'}-${currentX < window.innerWidth / 2 ? 'left' : 'right'
-          }` as Corner;
+        const newCorner = `${currentY < window.innerHeight / 2 ? 'top' : 'bottom'}-${currentX < window.innerWidth / 2 ? 'left' : 'right'}` as Corner;
+        const snappedPosition = calculatePosition(newCorner, dimensions.width, dimensions.height);
 
-        const snappedPosition = calculatePosition(newCorner, size.width, size.height);
-        const newDimensions = calculateDimensions(size, newCorner);
+        if (currentX === initialX && currentY === initialY) return;
 
         container.style.transform = `translate(${snappedPosition.x}px, ${snappedPosition.y}px)`;
 
         signalWidget.value = {
-          ...signalWidget.value,
+          isResizing: false,
           corner: newCorner,
-          position: snappedPosition,
-          dimensions: newDimensions
+          dimensions: {
+            isFullWidth: dimensions.isFullWidth,
+            isFullHeight: dimensions.isFullHeight,
+            width: dimensions.width,
+            height: dimensions.height,
+            position: snappedPosition
+          },
+          lastDimensions: signalWidget.value.lastDimensions
         };
 
-        queueMicrotask(() => {
-          saveLocalStorage(LOCALSTORAGE_KEY, {
-            corner: newCorner,
-            size: {
-              width: signalWidget.value.lastExpandedWidth,
-              height: signalWidget.value.lastExpandedHeight
-            }
-          });
+        saveLocalStorage(LOCALSTORAGE_KEY, {
+          corner: signalWidget.value.corner,
+          dimensions: signalWidget.value.dimensions,
+          lastDimensions: signalWidget.value.lastDimensions
         });
 
         updateDimensions();
@@ -158,28 +144,27 @@ export const Widget = () => {
     }
 
     let resizeTimeout: number;
+    let isInitialUpdate = true;
 
     const updateWidgetPosition = () => {
       if (!refContainer.current) return;
 
       const { corner } = signalWidget.value;
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-
       let newWidth, newHeight;
 
       if (isInspectFocused) {
-        const wasFullWidth = Math.abs(signalWidget.value.lastExpandedWidth - (windowWidth - (SAFE_AREA * 2))) <= 1;
-        const wasFullHeight = Math.abs(signalWidget.value.lastExpandedHeight - (windowHeight - (SAFE_AREA * 2))) <= 1;
-
-        newWidth = Math.max(MIN_SIZE.width, wasFullWidth
-          ? windowWidth - (SAFE_AREA * 2)
-          : Math.min(signalWidget.value.lastExpandedWidth, windowWidth - (SAFE_AREA * 2)));
-
-        newHeight = Math.max(MIN_SIZE.height, wasFullHeight
-          ? windowHeight - (SAFE_AREA * 2)
-          : Math.min(signalWidget.value.lastExpandedHeight, windowHeight - (SAFE_AREA * 2)));
+        const lastDims = signalWidget.value.lastDimensions;
+        newWidth = lastDims.width;
+        newHeight = lastDims.height;
       } else {
+        if (signalWidget.value.dimensions.width !== refInitialMinimizedWidth.current) {
+          signalWidget.value = {
+            ...signalWidget.value,
+            lastDimensions: {
+              ...signalWidget.value.dimensions
+            }
+          };
+        }
         newWidth = refInitialMinimizedWidth.current;
         newHeight = refInitialMinimizedHeight.current;
       }
@@ -191,26 +176,27 @@ export const Widget = () => {
       refContainer.current.style.height = `${newHeight}px`;
       refContainer.current.style.transform = `translate(${newPosition.x}px, ${newPosition.y}px)`;
 
-      const newDimensions = isInspectFocused ? calculateDimensions({ width: newWidth, height: newHeight }, corner) : undefined;
-      const newState = {
-        ...signalWidget.value,
-        position: newPosition,
-        size: { width: newWidth, height: newHeight },
-        ...(isInspectFocused && {
-          lastExpandedWidth: newWidth,
-          lastExpandedHeight: newHeight,
-          dimensions: newDimensions
-        })
+      signalWidget.value = {
+        isResizing: false,
+        corner,
+        dimensions: {
+          isFullWidth: newWidth >= window.innerWidth - (SAFE_AREA * 2),
+          isFullHeight: newHeight >= window.innerHeight - (SAFE_AREA * 2),
+          width: newWidth,
+          height: newHeight,
+          position: newPosition
+        },
+        lastDimensions: signalWidget.value.lastDimensions
       };
 
-      signalWidget.value = newState;
-
-      if (isInspectFocused) {
+      if (!isInitialUpdate) {
         saveLocalStorage(LOCALSTORAGE_KEY, {
           corner: signalWidget.value.corner,
-          size: { width: newWidth, height: newHeight }
+          dimensions: signalWidget.value.dimensions,
+          lastDimensions: signalWidget.value.lastDimensions
         });
       }
+      isInitialUpdate = false;
 
       updateDimensions();
     };
@@ -251,29 +237,26 @@ export const Widget = () => {
         className={cn(
           "flex-1",
           "flex flex-col",
-          "rounded-t-md",
+          "rounded-t-lg",
           "overflow-hidden",
           'opacity-100',
-          'transition-opacity duration-300 delay-300',
+          'transition-opacity duration-150',
           {
             'opacity-0 duration-0 delay-0': !isInspectFocused,
           }
-        )}>
+        )}
+      >
         <Header />
         <div
           ref={refPropContainer}
           className={cn(
             "react-scan-prop",
             "flex-1",
-            "max-w-0",
             "text-white",
-            'opacity-100',
-            "transition-[max-width,height,opacity] duration-max-width-0",
-            "duration-opacity-300 delay-opacity-300",
+            "transition-opacity duration-150 delay-150",
             "overflow-y-auto overflow-x-hidden",
             {
-              'max-w-full': isInspectFocused,
-              'opacity-0 duration-0 delay-0': !isInspectFocused
+              'opacity-0 duration-0 delay-0': !isInspectFocused,
             }
           )}
         />
@@ -284,7 +267,9 @@ export const Widget = () => {
         className={cn(
           "h-9",
           "flex items-center justify-between",
-          "transition-colors duration-200"
+          "transition-colors duration-200",
+          "overflow-hidden",
+          "rounded-lg"
         )}
       >
         <Toolbar refPropContainer={refPropContainer} />

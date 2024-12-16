@@ -1,12 +1,11 @@
 import { type JSX } from 'preact';
-import { useCallback, useEffect } from "preact/hooks";
+import { useCallback } from "preact/hooks";
 import { memo } from 'preact/compat';
-import { cn, saveLocalStorage, debounce } from '@web-utils/helpers';
-import { Store } from 'src/core';
+import { cn, saveLocalStorage } from '@web-utils/helpers';
 import { Icon } from '@web-components/icon';
 import { signalWidget, signalRefContainer, updateDimensions } from '../../state';
+import { LOCALSTORAGE_KEY, MIN_SIZE, SAFE_AREA } from '../../constants';
 import { type ResizeHandleProps } from './types';
-import { LOCALSTORAGE_KEY, MIN_SIZE } from './constants';
 import {
   calculatePosition,
   getInteractionClasses,
@@ -15,13 +14,12 @@ import {
   getHandleVisibility,
   getWindowDimensions,
   getOppositeCorner,
-  calculateDimensions,
   getClosestCorner
 } from './helpers';
 
 export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
   const isLine = !position.includes('-');
-  const { dimensions } = signalWidget.value;
+  const { dimensions, lastDimensions } = signalWidget.value;
   const { isFullWidth, isFullHeight } = dimensions;
   const currentCorner = signalWidget.value.corner;
 
@@ -37,17 +35,15 @@ export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
     if (!signalRefContainer.value) return;
 
     const { maxWidth, maxHeight, isFullWidth, isFullHeight } = getWindowDimensions();
-    const currentWidth = signalWidget.value.size.width;
-    const currentHeight = signalWidget.value.size.height;
+    const currentWidth = signalWidget.value.dimensions.width;
+    const currentHeight = signalWidget.value.dimensions.height;
     const currentCorner = signalWidget.value.corner;
-    const isCurrentFullWidth = isFullWidth(currentWidth);
-    const isCurrentFullHeight = isFullHeight(currentHeight);
-    const isFullScreen = isCurrentFullWidth && isCurrentFullHeight;
 
-    // Disable corner double-clicks in half-maximized states
-    if (!isLine && ((isCurrentFullWidth && !isCurrentFullHeight) || (!isCurrentFullWidth && isCurrentFullHeight))) {
-      return;
-    }
+    let isCurrentFullWidth = isFullWidth(currentWidth);
+    let isCurrentFullHeight = isFullHeight(currentHeight);
+
+    const isFullScreen = isCurrentFullWidth && isCurrentFullHeight;
+    const isPartiallyMaximized = (isCurrentFullWidth || isCurrentFullHeight) && !isFullScreen;
 
     let newWidth = currentWidth;
     let newHeight = currentHeight;
@@ -61,16 +57,35 @@ export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
 
     if (isLine) {
       if (position === 'left' || position === 'right') {
-        newWidth = isCurrentFullWidth ? MIN_SIZE.width : maxWidth;
+        newWidth = isCurrentFullWidth ? lastDimensions.width : maxWidth;
+        if (isPartiallyMaximized) {
+          newWidth = isCurrentFullWidth ? MIN_SIZE.width : maxWidth;
+        }
       } else {
-        newHeight = isCurrentFullHeight ? MIN_SIZE.height : maxHeight;
+        newHeight = isCurrentFullHeight ? lastDimensions.height : maxHeight;
+        if (isPartiallyMaximized) {
+          newHeight = isCurrentFullHeight ? MIN_SIZE.height * 12 : maxHeight;
+        }
       }
-    } else if (isFullScreen) {
-        newWidth = MIN_SIZE.width;
-      newHeight = MIN_SIZE.height;
     } else {
       newWidth = maxWidth;
       newHeight = maxHeight;
+    }
+
+
+    if (isFullScreen) {
+      if (isLine) {
+        if (position === 'left' || position === 'right') {
+          newWidth = MIN_SIZE.width;
+        } else {
+          newHeight = MIN_SIZE.height * 12;
+        }
+      } else {
+        newWidth = MIN_SIZE.width;
+        newHeight = MIN_SIZE.height * 12;
+        isCurrentFullWidth = false;
+        isCurrentFullHeight = false;
+      }
     }
 
     const container = signalRefContainer.value;
@@ -81,16 +96,17 @@ export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
     container.style.height = `${newHeight}px`;
     container.style.transform = `translate(${newPosition.x}px, ${newPosition.y}px)`;
 
-    const newDimensions = calculateDimensions({ width: newWidth, height: newHeight }, newCorner);
     const newState = {
-      ...signalWidget.value,
       isResizing: true,
       corner: newCorner,
-      size: { width: newWidth, height: newHeight },
-      position: newPosition,
-      lastExpandedWidth: newWidth,
-      lastExpandedHeight: newHeight,
-      dimensions: newDimensions
+      dimensions: {
+        isFullWidth: isCurrentFullWidth,
+        isFullHeight: isCurrentFullHeight,
+        width: newWidth,
+        height: newHeight,
+        position: newPosition
+      },
+      lastDimensions: signalWidget.value.dimensions
     };
     signalWidget.value = newState;
 
@@ -103,9 +119,9 @@ export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
 
     saveLocalStorage(LOCALSTORAGE_KEY, {
       corner: newCorner,
-      size: { width: newWidth, height: newHeight }
+      dimensions: signalWidget.value.dimensions
     });
-  }, [isLine, position]);
+  }, [isLine, position, lastDimensions]);
 
   const handleResize = useCallback((e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -114,21 +130,25 @@ export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
     const container = signalRefContainer.value;
     if (!container) return;
 
-    // Immediately remove transition at the start of resize
-    container.style.transition = 'none';
-
-    // Cache initial values
     const initialX = e.clientX;
     const initialY = e.clientY;
-    const initialWidth = signalWidget.value.size.width;
-    const initialHeight = signalWidget.value.size.height;
-    const initialPosition = signalWidget.value.position;
+    const { dimensions } = signalWidget.value;
+
+    const initialWidth = dimensions.isFullWidth
+      ? window.innerWidth - (SAFE_AREA * 2)
+      : dimensions.width;
+    const initialHeight = dimensions.isFullHeight
+      ? window.innerHeight - (SAFE_AREA * 2)
+      : dimensions.height;
+    const initialPosition = dimensions.position;
 
     let rafId: number | null = null;
     let isResizing = true;
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing || rafId) return;
+
+      container.style.transition = 'none';
 
       rafId = requestAnimationFrame(() => {
         const { newSize, newPosition } = calculateNewSizeAndPosition(
@@ -139,15 +159,18 @@ export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
           e.clientY - initialY
         );
 
-        // Batch DOM updates
         container.style.width = `${newSize.width}px`;
         container.style.height = `${newSize.height}px`;
         container.style.transform = `translate(${newPosition.x}px, ${newPosition.y}px)`;
 
         signalWidget.value = {
           ...signalWidget.value,
-          size: newSize,
-          position: newPosition,
+          dimensions: {
+            ...signalWidget.value.dimensions,
+            width: newSize.width,
+            height: newSize.height,
+            position: newPosition
+          },
           isResizing: true
         };
 
@@ -166,86 +189,58 @@ export const ResizeHandle = memo(({ position }: ResizeHandleProps) => {
         const container = signalRefContainer.value;
         if (!container) return;
 
-        // Get current position and window dimensions
-        const { x, y } = signalWidget.value.position;
+        const { dimensions, corner } = signalWidget.value;
+        const { isFullWidth, isFullHeight } = getWindowDimensions();
+        const isCurrentFullWidth = isFullWidth(dimensions.width);
+        const isCurrentFullHeight = isFullHeight(dimensions.height);
+        const isFullScreen = isCurrentFullWidth && isCurrentFullHeight;
 
-        // Find closest corner based on current position
-        const closestCorner = getClosestCorner(
-          { x, y },
-        );
+        let newCorner = corner;
+        if (isFullScreen || isCurrentFullWidth || isCurrentFullHeight) {
+          newCorner = getClosestCorner(dimensions.position);
+        }
 
-        // Calculate new position based on the closest corner
         const newPosition = calculatePosition(
-          closestCorner,
-          signalWidget.value.size.width,
-          signalWidget.value.size.height
+          newCorner,
+          dimensions.width,
+          dimensions.height
         );
 
-        // Apply smooth transition
         container.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
         container.style.transform = `translate(${newPosition.x}px, ${newPosition.y}px)`;
 
-        // Update state
         signalWidget.value = {
-          ...signalWidget.value,
-          corner: closestCorner,
-          position: newPosition,
           isResizing: false,
-          dimensions: calculateDimensions(signalWidget.value.size, closestCorner)
+          corner: newCorner,
+          dimensions: {
+            isFullWidth: isCurrentFullWidth,
+            isFullHeight: isCurrentFullHeight,
+            width: dimensions.width,
+            height: dimensions.height,
+            position: newPosition
+          },
+          lastDimensions: {
+            isFullWidth: isCurrentFullWidth,
+            isFullHeight: isCurrentFullHeight,
+            width: dimensions.width,
+            height: dimensions.height,
+            position: newPosition
+          }
         };
 
-        queueMicrotask(() => {
-          saveLocalStorage(LOCALSTORAGE_KEY, {
-            corner: closestCorner,
-            size: signalWidget.value.size
-          });
+        saveLocalStorage(LOCALSTORAGE_KEY, {
+          corner: newCorner,
+          dimensions: signalWidget.value.dimensions,
+          lastDimensions: signalWidget.value.lastDimensions
         });
 
         updateDimensions();
       });
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove, { passive: true });
+    document.addEventListener('mouseup', handleMouseUp, { passive: true });
   }, [position]);
-
-  // Window resize handler
-  useEffect(() => {
-    const handleWindowResize = debounce(() => {
-      if (!signalRefContainer.value) return;
-
-      const isInspectFocused = Store.inspectState.value.kind === 'focused';
-
-      if (isInspectFocused) {
-        const { dimensions, size } = signalWidget.value;
-        const { isFullWidth, isFullHeight } = dimensions;
-
-        if (isFullWidth || isFullHeight) {
-          const { maxWidth, maxHeight } = getWindowDimensions();
-
-          const newSize = {
-            width: isFullWidth ? maxWidth : size.width,
-            height: isFullHeight ? maxHeight : size.height
-          };
-
-          signalWidget.value = {
-            ...signalWidget.value,
-            size: newSize,
-            currentWidth: newSize.width,
-            currentHeight: newSize.height
-          };
-        }
-
-        updateDimensions();
-      }
-    }, 16);
-
-    window.addEventListener('resize', handleWindowResize);
-    return () => {
-      window.removeEventListener('resize', handleWindowResize);
-      handleWindowResize.cancel();
-    };
-  }, []);
 
   return (
     <div

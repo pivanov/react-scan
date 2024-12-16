@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo } from "preact/hooks";
-import { signal } from "@preact/signals";
-import { cn } from "@web-utils/helpers";
+import { cn, readLocalStorage, saveLocalStorage } from "@web-utils/helpers";
 import { ReactScanInternals, setOptions, Store } from "../../../..";
 import { INSPECT_TOGGLE_ID } from "../../inspect-element/inspect-state-machine";
 import { getNearestFiberFromElement } from "../../inspect-element/utils";
 import { Icon } from "../icon";
-
-const isSoundOnSignal = signal(false);
 
 interface ToolbarProps {
   refPropContainer: preact.RefObject<HTMLDivElement>;
@@ -15,9 +12,9 @@ interface ToolbarProps {
 export const Toolbar = ({ refPropContainer }: ToolbarProps) => {
   const inspectState = Store.inspectState;
 
+  const instrumentation = ReactScanInternals.instrumentation;
   const isInspectFocused = inspectState.value.kind === 'focused';
   const isInspectActive = inspectState.value.kind === 'inspecting';
-  const isPaused = ReactScanInternals.instrumentation?.isPaused!;
 
   const { inspectIcon, inspectColor } = useMemo(() => {
     let inspectIcon = null;
@@ -134,13 +131,16 @@ export const Toolbar = ({ refPropContainer }: ToolbarProps) => {
   }, [Store.inspectState.value]);
 
   const onToggleActive = useCallback(() => {
-    isPaused.value = !isPaused.value;
+    if (instrumentation) {
+      instrumentation.isPaused.value = !instrumentation.isPaused.value;
+      saveLocalStorage('react-scan-paused', instrumentation.isPaused.value);
+    }
   }, []);
 
   const onSoundToggle = useCallback(() => {
-    isSoundOnSignal.value = !isSoundOnSignal.value;
-    setOptions({ playSound: isSoundOnSignal.value });
-  }, [isSoundOnSignal.value]);
+    const newSoundState = !ReactScanInternals.options.value.playSound;
+    setOptions({ playSound: newSoundState });
+  }, []);
 
   useEffect(() => {
     const currentState = Store.inspectState.value;
@@ -153,90 +153,88 @@ export const Toolbar = ({ refPropContainer }: ToolbarProps) => {
     }
   }, []);
 
+  useEffect(() => {
+    const savedPausedState = readLocalStorage<boolean>('react-scan-paused');
+    if (savedPausedState !== null) {
+      if (instrumentation) {
+        instrumentation.isPaused.value = savedPausedState;
+      }
+    }
+  }, []);
+
   return (
-    <div className="flex max-h-9 min-h-9 w-full items-stretch">
+    <div className="flex max-h-9 min-h-9 flex-1 items-stretch overflow-hidden">
       <button
         id={INSPECT_TOGGLE_ID}
         title="Inspect element"
         onClick={onToggleInspect}
-        className={cn(
-          'flex items-center justify-center',
-          'px-3',
-        )}
+        className="flex items-center justify-center px-3"
         style={{ color: inspectColor }}
       >
         {inspectIcon}
       </button>
       <button
         id="react-scan-power"
-        title={!isPaused ? 'Stop' : 'Start'}
+        title={ReactScanInternals.instrumentation?.isPaused.value ? 'Start' : 'Stop'}
         onClick={onToggleActive}
-        className={cn(
-          'flex items-center justify-center',
-          'px-3',
-          {
-            'text-white': !isPaused,
-            'text-[#999]': isPaused,
-          },
-        )}
+        className={cn('flex items-center justify-center px-3', {
+          'text-white': !ReactScanInternals.instrumentation?.isPaused.value,
+          'text-[#999]': ReactScanInternals.instrumentation?.isPaused.value,
+        })}
       >
-        <Icon name={`icon-${isPaused ? 'eye-off' : 'eye'}`} />
+        <Icon name={`icon-${ReactScanInternals.instrumentation?.isPaused.value ? 'eye-off' : 'eye'}`} />
       </button>
       <button
         id="react-scan-sound-toggle"
         onClick={onSoundToggle}
-        title={isSoundOnSignal.value ? 'Sound On' : 'Sound Off'}
-        className={cn(
-          'flex items-center justify-center',
-          'px-3',
-          {
-            'text-white': isSoundOnSignal.value,
-            'text-[#999]': !isSoundOnSignal.value,
-          },
-        )}
+        title={ReactScanInternals.options.value.playSound ? 'Sound On' : 'Sound Off'}
+        className={cn('flex items-center justify-center px-3', {
+          'text-white': ReactScanInternals.options.value.playSound,
+          'text-[#999]': !ReactScanInternals.options.value.playSound,
+        })}
       >
-        <Icon name={`icon-${isSoundOnSignal.value ? 'volume-on' : 'volume-off'}`} />
+        <Icon name={`icon-${ReactScanInternals.options.value.playSound ? 'volume-on' : 'volume-off'}`} />
       </button>
 
-      <div
+      {
+        isInspectFocused && (
+          <div
+            className={cn(
+              "flex items-stretch justify-between",
+              "ml-auto",
+              "border-l-1 border-white/10 text-[#999]",
+              "overflow-hidden",
+            )}
+          >
+            <button
+              id="react-scan-previous-focus"
+              title="Previous element"
+              onClick={onPreviousFocus}
+              className="flex items-center justify-center px-3"
+            >
+              <Icon name="icon-previous" />
+            </button>
+            <button
+              id="react-scan-next-focus"
+              title="Next element"
+              onClick={onNextFocus}
+              className="flex items-center justify-center px-3"
+            >
+              <Icon name="icon-next" />
+            </button>
+          </div>
+        )
+      }
+      <span
         className={cn(
-          'flex-1 flex items-stretch justify-between',
-          'text-[#999]',
-          'border-l-1 border-white/10',
+          "flex items-center whitespace-nowrap px-3 text-sm text-white",
+          {
+            'ml-auto': !isInspectFocused,
+          }
         )}
       >
-        {
-          isInspectFocused && (
-            <div className="flex flex-1 items-stretch justify-center">
-              <button
-                id="react-scan-previous-focus"
-                title="Previous element"
-                onClick={onPreviousFocus}
-                className={cn(
-                  'flex items-center justify-center',
-                  'px-3',
-                )}
-              >
-                <Icon name="icon-previous" />
-              </button>
-              <button
-                id="react-scan-next-focus"
-                title="Next element"
-                onClick={onNextFocus}
-                className={cn(
-                  'flex items-center justify-center',
-                  'px-3',
-                )}
-              >
-                <Icon name="icon-next" />
-              </button>
-            </div>
-          )
-        }
-        <span className="flex items-center whitespace-nowrap px-3 text-sm text-white">
-          react-scan
-        </span>
-      </div>
+        react-scan
+      </span>
     </div>
   );
 };

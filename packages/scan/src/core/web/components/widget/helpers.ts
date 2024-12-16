@@ -1,4 +1,4 @@
-import { SAFE_AREA, MIN_SIZE } from './constants';
+import { SAFE_AREA, MIN_SIZE } from '../../constants';
 import { type Corner, type Position, type ResizeHandleProps, type Size } from './types';
 
 interface WindowDimensionsCache {
@@ -57,13 +57,11 @@ export const getOppositeCorner = (
 ): Corner => {
   // For full screen mode
   if (isFullScreen) {
-    // For Corners
     if (position === 'top-left') return 'bottom-right';
     if (position === 'top-right') return 'bottom-left';
     if (position === 'bottom-left') return 'top-right';
     if (position === 'bottom-right') return 'top-left';
 
-    // For lines
     const [vertical, horizontal] = currentCorner.split('-');
     if (position === 'left') return `${vertical}-right` as Corner;
     if (position === 'right') return `${vertical}-left` as Corner;
@@ -104,13 +102,11 @@ export const calculatePosition = (corner: Corner, width: number, height: number)
 
 export const getPositionClasses = (position: ResizeHandleProps['position']) => {
   return {
-    // Lines - centered on their edges
     'top-0 left-0 w-full -translate-y-1/2': position === 'top',
     'bottom-0 left-0 w-full translate-y-1/2': position === 'bottom',
     'left-0 top-0 h-full -translate-x-1/2': position === 'left',
     'right-0 top-0 h-full translate-x-1/2': position === 'right',
 
-    // Corners - add transform for centering
     'top-0 left-0 -translate-x-1/2 -translate-y-1/2': position === 'top-left',
     'top-0 right-0 translate-x-1/2 -translate-y-1/2': position === 'top-right',
     'bottom-0 left-0 -translate-x-1/2 translate-y-1/2': position === 'bottom-left',
@@ -144,7 +140,6 @@ const positionMatchesCorner = (position: ResizeHandleProps['position'], corner: 
   const [vertical, horizontal] = corner.split('-');
   return position === vertical || position === horizontal;
 };
-
 
 export const getHandleVisibility = (
   position: ResizeHandleProps['position'],
@@ -199,53 +194,43 @@ export const calculateNewSizeAndPosition = (
   deltaX: number,
   deltaY: number
 ): { newSize: Size; newPosition: Position } => {
+  const maxWidth = window.innerWidth - (SAFE_AREA * 2);
+  const maxHeight = window.innerHeight - (SAFE_AREA * 2);
+
   let newWidth = initialSize.width;
   let newHeight = initialSize.height;
   let newX = initialPosition.x;
   let newY = initialPosition.y;
 
-  // Handle horizontal resize
+  // horizontal resize
   if (position.includes('right')) {
-    newWidth = calculateBoundedSize(initialSize.width, deltaX, true);
+    const proposedWidth = initialSize.width + deltaX;
+    newWidth = Math.min(maxWidth, Math.max(MIN_SIZE.width, proposedWidth));
   }
   if (position.includes('left')) {
-    newWidth = calculateBoundedSize(initialSize.width, -deltaX, true);
-    newX = initialPosition.x + initialSize.width - newWidth;
+    const proposedWidth = initialSize.width - deltaX;
+    newWidth = Math.min(maxWidth, Math.max(MIN_SIZE.width, proposedWidth));
+    newX = initialPosition.x - (newWidth - initialSize.width);
   }
 
-  // Handle vertical resize
+  // vertical resize
   if (position.includes('bottom')) {
-    newHeight = calculateBoundedSize(initialSize.height, deltaY, false);
+    const proposedHeight = initialSize.height + deltaY;
+    newHeight = Math.min(maxHeight, Math.max(MIN_SIZE.height * 5, proposedHeight));
   }
   if (position.includes('top')) {
-    newHeight = calculateBoundedSize(initialSize.height, -deltaY, false);
-    newY = initialPosition.y + initialSize.height - newHeight;
+    const proposedHeight = initialSize.height - deltaY;
+    newHeight = Math.min(maxHeight, Math.max(MIN_SIZE.height * 5, proposedHeight));
+    newY = initialPosition.y - (newHeight - initialSize.height);
   }
 
-  // Apply position bounds
-  newX = Math.max(SAFE_AREA, Math.min(newX, getWindowDimensions().rightEdge(newWidth)));
-  newY = Math.max(SAFE_AREA, Math.min(newY, getWindowDimensions().bottomEdge(newHeight)));
+  // Ensure position stays within bounds
+  newX = Math.max(SAFE_AREA, Math.min(newX, window.innerWidth - SAFE_AREA - newWidth));
+  newY = Math.max(SAFE_AREA, Math.min(newY, window.innerHeight - SAFE_AREA - newHeight));
 
   return {
     newSize: { width: newWidth, height: newHeight },
     newPosition: { x: newX, y: newY }
-  };
-}
-
-export const calculateDimensions = (
-  size: { width: number; height: number },
-  corner: Corner
-) => {
-  const { maxWidth, maxHeight } = getWindowDimensions();
-  const cornerStr = String(corner);
-
-  return {
-    isFullWidth: Math.abs(size.width - maxWidth) <= 1,
-    isFullHeight: Math.abs(size.height - maxHeight) <= 1,
-    isAtTop: cornerStr.startsWith('top'),
-    isAtBottom: cornerStr.startsWith('bottom'),
-    isAtLeft: cornerStr.endsWith('left'),
-    isAtRight: cornerStr.endsWith('right')
   };
 };
 

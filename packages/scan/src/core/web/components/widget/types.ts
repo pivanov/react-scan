@@ -14,27 +14,23 @@ export interface ResizeHandleProps {
   position: Corner | 'top' | 'bottom' | 'left' | 'right';
 }
 
-// Full widget runtime configuration
-export interface WidgetConfig {
-  corner: Corner;
+export interface WidgetDimensions {
+  isFullWidth: boolean;
+  isFullHeight: boolean;
+  width: number;
+  height: number;
   position: Position;
-  size: Size;
-  lastExpandedWidth: number;
-  lastExpandedHeight: number;
-  dimensions: {
-    isFullWidth: boolean;
-    isFullHeight: boolean;
-    isAtTop: boolean;
-    isAtBottom: boolean;
-    isAtLeft: boolean;
-    isAtRight: boolean;
-  };
-  isResizing: boolean;
-  currentWidth: number;
-  currentHeight: number;
-  currentX: number;
-  currentY: number;
 }
 
-// Persistent widget settings
-export type WidgetSettings = Pick<WidgetConfig, 'corner' | 'size'>;
+export interface WidgetConfig {
+  isResizing: boolean;
+  corner: Corner;
+  dimensions: WidgetDimensions;
+  lastDimensions: WidgetDimensions;
+}
+
+export interface WidgetSettings {
+  corner: Corner;
+  dimensions: WidgetDimensions;
+  lastDimensions: WidgetDimensions;
+}

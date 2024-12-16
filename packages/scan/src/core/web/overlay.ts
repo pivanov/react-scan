@@ -1,7 +1,6 @@
 import { recalcOutlines } from './utils/outline';
 
 export const initReactScanOverlay = () => {
-  // Get the shadow root from our container
   const container = document.getElementById('react-scan-root');
   const shadow = container?.shadowRoot;
 
@@ -12,7 +11,6 @@ export const initReactScanOverlay = () => {
   const overlayElement = document.createElement('canvas');
   overlayElement.id = 'react-scan-overlay';
 
-  // Add the original styling
   overlayElement.style.position = 'fixed';
   overlayElement.style.top = '0';
   overlayElement.style.left = '0';
@@ -56,7 +54,6 @@ export const initReactScanOverlay = () => {
     recalcOutlines();
   });
 
-  // Initial size setup
   updateCanvasSize();
 
   return ctx;

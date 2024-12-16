@@ -44,7 +44,7 @@ export const Header = () => {
       const renderTime = reportDataFiber?.time ?? 0;
 
       refComponentName.current.textContent = componentName;
-      refMetrics.current.dataset.text = renderCount > 0
+      refMetrics.current.textContent = renderCount > 0
         ? `${renderCount} renders${renderTime > 0 ? ` • ${renderTime.toFixed(2)}ms` : ''}`
         : '';
     };
@@ -104,26 +104,25 @@ export const Header = () => {
     })();
   }, [inspectState, isReplaying]);
 
-  if (inspectState.kind !== 'focused') {
-    return null;
-  }
-
   const { overrideProps } = getOverrideMethods();
   const canEdit = !!overrideProps;
 
   return (
     <div
       className={cn(
-        "flex",
         "react-scan-header",
+        "flex",
+        "min-h-9",
+        'whitespace-nowrap',
+        "overflow-hidden",
         {
           'hidden': inspectState.kind !== 'focused'
         }
       )}
     >
-      <div className="react-scan-header-left">
+      <div className="react-scan-header-left overflow-hidden">
         <span ref={refComponentName} className="react-scan-component-name" />
-        <span ref={refMetrics} className="react-scan-metrics with-data-text" />
+        <span ref={refMetrics} className="react-scan-metrics" />
       </div>
       <div class="react-scan-header-right">
         {canEdit && (
