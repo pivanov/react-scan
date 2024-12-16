@@ -241,8 +241,8 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
     type: null,
   };
 
-  currentFiberData.count += renders.length;
-  currentFiberData.time += selfTime;
+  currentFiberData.count = Number(currentFiberData.count || 0) + Number(renders.length);
+  currentFiberData.time = Number(currentFiberData.time || 0) + Number(selfTime || 0);
   currentFiberData.renders = renders;
 
   Store.reportData.set(reportFiber, currentFiberData);
@@ -256,8 +256,8 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
       type: getType(fiber.type) || fiber.type,
     };
 
-    existingLegacyData.count += renders.length;
-    existingLegacyData.time += selfTime;
+    existingLegacyData.count = Number(existingLegacyData.count || 0) + Number(renders.length);
+    existingLegacyData.time = Number(existingLegacyData.time || 0) + Number(selfTime || 0);
     existingLegacyData.renders = renders;
 
     Store.legacyReportData.set(displayName, existingLegacyData);
