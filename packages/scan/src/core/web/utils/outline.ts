@@ -127,27 +127,23 @@ export const recalcOutlines = throttle(() => {
 
   const domNodes = new Set<HTMLElement>();
 
-  // Collect domNodes from scheduledOutlines
   for (let i = scheduledOutlines.length - 1; i >= 0; i--) {
     const outline = scheduledOutlines[i];
     domNodes.add(outline.domNode);
   }
 
-  // Collect domNodes from activeOutlines
   for (let i = activeOutlines.length - 1; i >= 0; i--) {
     const activeOutline = activeOutlines[i];
     if (!activeOutline) continue;
     domNodes.add(activeOutline.outline.domNode);
   }
 
-  // Batch compute rects for all unique domNodes
   const rectMap = new Map<HTMLElement, DOMRect | null>();
   domNodes.forEach((domNode) => {
     const rect = getRect(domNode);
     rectMap.set(domNode, rect);
   });
 
-  // Update scheduledOutlines
   for (let i = scheduledOutlines.length - 1; i >= 0; i--) {
     const outline = scheduledOutlines[i];
     const rect = rectMap.get(outline.domNode);
@@ -158,7 +154,6 @@ export const recalcOutlines = throttle(() => {
     outline.rect = rect;
   }
 
-  // Update activeOutlines
   for (let i = activeOutlines.length - 1; i >= 0; i--) {
     const activeOutline = activeOutlines[i];
     if (!activeOutline) continue;
@@ -329,30 +324,13 @@ export const fadeOutOutline = (
       }
     }
 
-    // const _totalTime = getMainThreadTaskTime();
-    // if (totalTime) {
-    //   console.log(totalTime);
-    //   let divideBy = 1;
-    //   for (let i = 0; i < Math.floor(totalTime / 50); i++) {
-    //     divideBy += 0.1;
-    //   }
-    //   activeOutline.totalFrames = Math.floor(
-    //     Math.max(1, totalFrames / divideBy),
-    //   );
-    // }
     const { rect } = outline;
-    // const unstable = isOutlineUnstable(outline);
-
-    // let hasBadScore = false;
 
     if (renderCountThreshold > 0) {
       let count = 0;
       for (let i = 0, len = outline.renders.length; i < len; i++) {
         const render = outline.renders[i];
         count += render.count;
-        // if (render.score >= 0.5) {
-        //   hasBadScore = true;
-        // }
       }
       if (count < renderCountThreshold) {
         continue;
@@ -495,12 +473,10 @@ export const mergeOverlappingLabels = (
         const overlapPercentageLabel = overlapArea / labelArea;
         const overlapPercentageMergedLabel = overlapArea / mergedLabelArea;
 
-        // Only merge if overlap is greater than 25%
         if (
           overlapPercentageLabel > 0.25 ||
           overlapPercentageMergedLabel > 0.25
         ) {
-          // Merge labels by combining their properties
           const combinedOutline: PendingOutline = {
             rect: getOutermostOutline(mergedLabel.outline, label.outline).rect,
             domNode: getOutermostOutline(mergedLabel.outline, label.outline)
@@ -508,7 +484,6 @@ export const mergeOverlappingLabels = (
             renders: [...mergedLabel.outline.renders, ...label.outline.renders],
           };
 
-          // Update mergedLabel properties in place
           mergedLabel.alpha = Math.max(mergedLabel.alpha, label.alpha);
           mergedLabel.outline = combinedOutline;
           mergedLabel.reasons = Array.from(
@@ -522,7 +497,6 @@ export const mergeOverlappingLabels = (
     }
 
     if (!isMerged) {
-      // Add the label to mergedLabels
       mergedLabels.push(label);
     }
   }
