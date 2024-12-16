@@ -240,7 +240,11 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
   Store.lastReportTime.value = performance.now();
 
   if (prevRenderData) {
+    prevRenderData.count = ((prevRenderData.count) ?? 0) + renders.length;
     prevRenderData.renders.push(...renders);
+    if (renders[0]?.time) {
+      prevRenderData.time = ((prevRenderData.time) ?? 0) + (renders[0].time);
+    }
   } else {
     const { selfTime } = getTimings(fiber);
 
@@ -259,7 +263,11 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
     const prevLegacyRenderData = Store.legacyReportData.get(displayName);
 
     if (prevLegacyRenderData) {
+      prevLegacyRenderData.count = ((prevLegacyRenderData.count) ?? 0) + renders.length;
       prevLegacyRenderData.renders.push(...renders);
+      if (renders[0]?.time) {
+        prevLegacyRenderData.time = ((prevLegacyRenderData.time) ?? 0) + (renders[0].time);
+      }
     } else {
       const { selfTime } = getTimings(fiber);
 
