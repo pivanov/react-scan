@@ -6,27 +6,30 @@ import {
   getTimings,
   getType,
   isCompositeFiber,
+  traverseFiber,
 } from 'bippy';
 import {
   type ActiveOutline,
   flushOutlines,
   getOutline,
   type PendingOutline,
+
 } from '@web-utils/outline';
-import { logIntro } from '@web-utils/log';
+import { log, logIntro } from '@web-utils/log';
 import {
   createInspectElementStateMachine,
   type States,
 } from '@web-inspect-element/inspect-state-machine';
 import { playGeigerClickSound } from '@web-utils/geiger';
 import { ICONS } from '@web-assets/svgs/svgs';
-import { isValidFiber, updateFiberRenderData, type RenderData } from 'src/core/utils';
-import { createInstrumentation, type Render } from './instrumentation';
-import styles from './web/assets/css/styles.css';
+import {  updateFiberRenderData, type RenderData } from 'src/core/utils';
 import { initReactScanOverlay } from './web/overlay';
+import { createInstrumentation, type Render } from './instrumentation';
 import { createToolbar } from './web/toolbar';
 import type { InternalInteraction } from './monitor/types';
 import { type getSession } from './monitor/utils';
+// @ts-expect-error CSS import
+import styles from './web/assets/css/styles.css';
 
 export interface Options {
   /**
@@ -87,6 +90,7 @@ export interface Options {
    * Maximum number of renders for red indicator
    *
    * @default 20
+   * @deprecated
    */
   maxRenders?: number;
 
@@ -260,6 +264,30 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
   }
 };
 
+export const isValidFiber = (fiber: Fiber) => {
+  if (ignoredProps.has(fiber.memoizedProps)) {
+    return false;
+  }
+
+  const allowList = ReactScanInternals.componentAllowList;
+  const shouldAllow =
+    allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
+
+  if (shouldAllow) {
+    const parent = traverseFiber(
+      fiber,
+      (node) => {
+        const options =
+          allowList?.get(node.type) ?? allowList?.get(node.elementType);
+        return options?.includeChildren;
+      },
+      true,
+    );
+    if (!parent && !shouldAllow) return false;
+  }
+  return true;
+};
+
 export const start = () => {
   if (typeof window === 'undefined') return;
 
@@ -328,14 +356,15 @@ export const start = () => {
   };
 
   // TODO: dynamic enable, and inspect-off check
-  const instrumentation = createInstrumentation({
-    kind: 'devtool',
+  const instrumentation = createInstrumentation('devtools', {
     onCommitStart() {
       ReactScanInternals.options.value.onCommitStart?.();
     },
-    isValidFiber(fiber) {
-      return isValidFiber(fiber);
+    onError(error) {
+      // eslint-disable-next-line no-console
+      console.error('[React Scan] Error instrumenting:', error);
     },
+    isValidFiber,
     onRender(fiber, renders) {
       if (ReactScanInternals.instrumentation?.isPaused.value) {
         // don't draw if it's paused
@@ -345,6 +374,10 @@ export const start = () => {
 
       if (isCompositeFiber(fiber)) {
         reportRender(fiber, renders);
+      }
+
+      if (ReactScanInternals.options.value.log) {
+        log(renders);
       }
 
       ReactScanInternals.options.value.onRender?.(fiber, renders);
@@ -360,7 +393,8 @@ export const start = () => {
           const renderTimeThreshold = 10;
           const amplitude = Math.min(
             1,
-            (render.time - renderTimeThreshold) / (renderTimeThreshold * 2),
+            ((render.time ?? 0) - renderTimeThreshold) /
+              (renderTimeThreshold * 2),
           );
           playGeigerClickSound(audioContext, amplitude);
         }

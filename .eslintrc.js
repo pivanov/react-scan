@@ -59,7 +59,7 @@ module.exports = {
       typescript: {
         project: [
           resolve(__dirname, 'tsconfig.json'), // Root tsconfig
-          resolve(__dirname, 'packages/scan/tsconfig.json'), // Scan package tsconfig
+          resolve(__dirname, 'packages/**/tsconfig.json'), // Scan package tsconfig
         ],
       },
     },

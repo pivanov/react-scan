@@ -35,6 +35,7 @@ export const throttle = <T extends (...args: Array<any>) => any>(
   };
 };
 
+
 export const debounce = <T extends (...args: Array<any>) => void>(
   fn: T,
   delay: number
@@ -65,6 +66,7 @@ export const isOutlineUnstable = (outline: PendingOutline) => {
   }
   return false;
 };
+
 
 export const createElement = (htmlString: string): HTMLElement => {
   const template = document.createElement('template');

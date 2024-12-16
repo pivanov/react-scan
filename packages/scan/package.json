@@ -91,6 +91,11 @@
         }
       }
     },
+    "./install-hook": {
+      "types": "./dist/install-hook.d.ts",
+      "import": "./dist/install-hook.mjs",
+      "require": "./dist/install-hook.js"
+    },
     "./auto": {
       "production": {
         "import": {
@@ -237,7 +242,7 @@
     "@preact/signals": "^1.3.1",
     "@rollup/pluginutils": "^5.1.3",
     "@types/node": "^20.17.9",
-    "bippy": "^0.0.14",
+    "bippy": "^0.0.19",
     "esbuild": "^0.24.0",
     "estree-walker": "^3.0.3",
     "kleur": "^4.1.5",
@@ -255,6 +260,8 @@
     "@types/react-router": "^5.1.0",
     "autoprefixer": "^10.4.20",
     "clsx": "^2.1.1",
+    "@vercel/style-guide": "^6.0.0",
+    "es-module-lexer": "^1.5.4",
     "next": "*",
     "npm-run-all": "^4.1.5",
     "postcss": "^8",

@@ -23,6 +23,7 @@ export const getFiberFromElement = (element: Element): Fiber | null => {
     if (!renderers) return null;
     for (const [_, renderer] of Array.from(renderers)) {
       try {
+        // @ts-expect-error - renderer.findFiberByHostInstance is not typed
         const fiber = renderer.findFiberByHostInstance(element);
         if (fiber) return fiber;
       } catch (e) {
@@ -301,9 +302,11 @@ export const getOverrideMethods = (): OverrideMethods => {
             const prevOverrideProps = overrideProps;
             overrideProps = (fiber: Fiber, key: string, value: any) => {
               prevOverrideProps(fiber, key, value);
+              // @ts-expect-error - renderer.overrideProps is not typed
               renderer.overrideProps(fiber, key, value);
             };
           } else {
+            // @ts-expect-error - renderer.overrideProps is not typed
             overrideProps = renderer.overrideProps;
           }
 
@@ -311,9 +314,11 @@ export const getOverrideMethods = (): OverrideMethods => {
             const prevOverrideHookState = overrideHookState;
             overrideHookState = (fiber: Fiber, key: string, value: any) => {
               prevOverrideHookState(fiber, key, value);
+              // @ts-expect-error - renderer.overrideHookState is not typed
               renderer.overrideHookState(fiber, key, value);
             };
           } else {
+            // @ts-expect-error - renderer.overrideHookState is not typed
             overrideHookState = renderer.overrideHookState;
           }
         } catch (e) {
