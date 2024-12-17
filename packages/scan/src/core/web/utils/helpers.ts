@@ -9,6 +9,8 @@ export const cn = (...inputs: Array<ClassValue>): string => {
   return twMerge(clsx(inputs));
 };
 
+export const isFirefox = typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox');
+
 export const onIdle = (callback: () => void) => {
   if ('scheduler' in globalThis) {
     return globalThis.scheduler.postTask(callback, {
