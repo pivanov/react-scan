@@ -36,11 +36,16 @@ export const Widget = () => {
       newWidth = calculateBoundedSize(lastDims.width, 0, true);
       newHeight = calculateBoundedSize(lastDims.height, 0, false);
     } else {
-      if (signalWidget.value.dimensions.width !== refInitialMinimizedWidth.current) {
+      const currentDims = signalWidget.value.dimensions;
+      if (currentDims.width > refInitialMinimizedWidth.current) {
         signalWidget.value = {
           ...signalWidget.value,
           lastDimensions: {
-            ...signalWidget.value.dimensions
+            isFullWidth: currentDims.isFullWidth,
+            isFullHeight: currentDims.isFullHeight,
+            width: currentDims.width,
+            height: currentDims.height,
+            position: currentDims.position
           }
         };
       }
@@ -74,16 +79,20 @@ export const Widget = () => {
       containerStyle.transform = `translate3d(${newPosition.x}px, ${newPosition.y}px, 0)`;
     });
 
+    const newDimensions = {
+      isFullWidth: newWidth >= window.innerWidth - (SAFE_AREA * 2),
+      isFullHeight: newHeight >= window.innerHeight - (SAFE_AREA * 2),
+      width: newWidth,
+      height: newHeight,
+      position: newPosition
+    };
+
     signalWidget.value = {
       corner,
-      dimensions: {
-        isFullWidth: newWidth >= window.innerWidth - (SAFE_AREA * 2),
-        isFullHeight: newHeight >= window.innerHeight - (SAFE_AREA * 2),
-        width: newWidth,
-        height: newHeight,
-        position: newPosition
-      },
-      lastDimensions: signalWidget.value.lastDimensions
+      dimensions: newDimensions,
+      lastDimensions: isInspectFocused
+        ? signalWidget.value.lastDimensions
+        : (newWidth > refInitialMinimizedWidth.current ? newDimensions : signalWidget.value.lastDimensions)
     };
 
     if (shouldSave) {
@@ -197,14 +206,11 @@ export const Widget = () => {
         lastDimensions: signalWidget.value.lastDimensions
       };
 
-      const shouldSave = !(dimensions.width < MIN_SIZE.width || dimensions.height < MIN_SIZE.height * 5);
-      if (shouldSave) {
-        saveLocalStorage(LOCALSTORAGE_KEY, {
-          corner: signalWidget.value.corner,
-          dimensions: signalWidget.value.dimensions,
-          lastDimensions: signalWidget.value.lastDimensions
-        });
-      }
+      saveLocalStorage(LOCALSTORAGE_KEY, {
+        corner: newCorner,
+        dimensions: signalWidget.value.dimensions,
+        lastDimensions: signalWidget.value.lastDimensions
+      });
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -218,14 +224,21 @@ export const Widget = () => {
     refInitialMinimizedHeight.current = refFooter.current.offsetHeight;
     refInitialMinimizedWidth.current = refContainer.current.offsetWidth;
 
-    signalWidget.value = {
-      ...signalWidget.value,
-      dimensions: {
-        ...signalWidget.value.dimensions,
-        width: refInitialMinimizedWidth.current,
-        height: refInitialMinimizedHeight.current
-      }
-    };
+    refContainer.current.style.maxWidth = `calc(100vw - ${SAFE_AREA * 2}px)`;
+    refContainer.current.style.maxHeight = `calc(100vh - ${SAFE_AREA * 2}px)`;
+
+    if (Store.inspectState.value.kind !== 'focused') {
+      signalWidget.value = {
+        ...signalWidget.value,
+        dimensions: {
+          isFullWidth: false,
+          isFullHeight: false,
+          width: refInitialMinimizedWidth.current,
+          height: refInitialMinimizedHeight.current,
+          position: signalWidget.value.dimensions.position
+        }
+      };
+    }
 
     signalRefContainer.value = refContainer.current;
 
@@ -272,7 +285,7 @@ export const Widget = () => {
       resizeTimeout = requestAnimationFrame(() => {
         const container = refContainer.current;
         if (!container) return;
-        updateWidgetPosition();
+        updateWidgetPosition(true);
       });
     }, 32);
 

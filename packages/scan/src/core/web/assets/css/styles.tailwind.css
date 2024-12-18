@@ -86,8 +86,6 @@ button {
   @apply z-[999999999];
   @apply animate-fade-in animation-duration-300 animation-delay-300;
   @apply shadow-[0_4px_12px_rgba(0,0,0,0.2)];
-  max-width: calc(100vw - 48px); /* 48px = SAFE_AREA * 2 */
-  max-height: calc(100vh - 48px);
 }
 
 
