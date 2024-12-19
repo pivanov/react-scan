@@ -2,10 +2,10 @@
   "name": "root",
   "private": true,
   "scripts": {
-    "build": "WORKSPACE_BUILD=true pnpm --parallel build",
-    "postbuild": "node scripts/version-warning.mjs",
-    "dev": "pnpm --parallel dev",
-    "pack": "pnpm --parallel pack",
+    "build": "node ./scripts/workspace.mjs build",
+    "dev": "node ./scripts/workspace.mjs dev",
+    "pack": "node ./scripts/workspace.mjs pack",
+    "postbuild": "node ./scripts/version-warning.mjs",
     "pack:bump": "pnpm --filter scan pack:bump",
     "lint": "pnpm --parallel lint",
     "eslint:fix": "eslint --fix packages/*"
@@ -21,8 +21,8 @@
     "eslint-import-resolver-typescript": "^3.7.0",
     "eslint-plugin-jsonc": "^2.18.2",
     "eslint-plugin-tailwindcss": "^3.17.5",
-		"@biomejs/biome": "^1.9.4",
-    "typescript": "5.4.5"
+    "typescript": "5.4.5",
+    "vite-tsconfig-paths": "^5.1.4"
   },
   "packageManager": "pnpm@9.1.0",
   "dependencies": {

@@ -74,7 +74,7 @@
     {
       "matches": ["<all_urls>"],
       "js": [
-        "src/inject/dev-tools-hook.ts"
+        "src/inject/react-scan.ts"
       ],
       "run_at": "document_start",
       "world": "MAIN",

@@ -35,6 +35,7 @@ import styles from './web/assets/css/styles.css';
 
 let toolbarContainer: HTMLElement | null = null;
 let shadowRoot: ShadowRoot | null = null;
+let audioContext: AudioContext | null = null;
 
 export interface Options {
   /**
@@ -322,12 +323,13 @@ export const setOptions = (userOptions: Partial<Options>) => {
 
   saveLocalStorage('react-scan-options', newOptions);
 
+  // Handle toolbar visibility only if showToolbar changed
   if ('showToolbar' in validOptions) {
     if (toolbarContainer && !newOptions.showToolbar) {
       toolbarContainer.remove();
     }
 
-    if (newOptions.showToolbar && toolbarContainer && shadowRoot) {
+    if (newOptions.showToolbar && shadowRoot) {
       toolbarContainer = createToolbar(shadowRoot);
     }
   }
@@ -410,6 +412,7 @@ const startFlushOutlineInterval = (ctx: CanvasRenderingContext2D) => {
     });
   }, 30);
 };
+
 export const start = () => {
   if (typeof window === 'undefined') return;
 
@@ -425,21 +428,29 @@ export const start = () => {
     }
   }
 
-  const audioContext =
-    typeof window !== 'undefined'
-      ? new (
-          window.AudioContext ||
-          // @ts-expect-error -- This is a fallback for Safari
-          window.webkitAudioContext
-        )()
-      : null;
-
   let ctx: ReturnType<typeof initReactScanOverlay> | null = null;
   // TODO: dynamic enable, and inspect-off check
+
 
   const instrumentation = createInstrumentation('devtools', {
     onActive() {
       if (!Store.monitor.value) {
+        const reactScanOptions = ReactScanInternals.options.value;
+
+        // Create audio context on first user interaction
+        const createAudioContextOnInteraction = () => {
+          audioContext = new (
+            window.AudioContext ||
+            // @ts-expect-error -- This is a fallback for Safari
+            window.webkitAudioContext
+          )();
+
+          void audioContext.resume();
+          window.removeEventListener('pointerdown', createAudioContextOnInteraction);
+        };
+
+        window.addEventListener('pointerdown', createAudioContextOnInteraction, { once: true });
+
         const rdtHook = getRDTHook();
         let isProduction = false;
         for (const renderer of rdtHook.renderers.values()) {
@@ -448,9 +459,10 @@ export const start = () => {
             isProduction = true;
           }
         }
+
         if (
           isProduction &&
-          !ReactScanInternals.options.value.dangerouslyForceRunInProduction
+          !reactScanOptions.dangerouslyForceRunInProduction
         ) {
           setOptions({ enabled: false, showToolbar: false });
           // eslint-disable-next-line no-console
@@ -480,6 +492,7 @@ export const start = () => {
           ICONS,
           'image/svg+xml',
         ).documentElement;
+
         shadowRoot.appendChild(iconSprite);
 
         const root = document.createElement('div');
@@ -503,23 +516,9 @@ export const start = () => {
           ReactScanInternals,
         };
 
-        if (ReactScanInternals.options.value.showToolbar) {
+        if (reactScanOptions.enabled && reactScanOptions.showToolbar) {
           toolbarContainer = createToolbar(shadowRoot);
         }
-
-        container.setAttribute('part', 'scan-root');
-
-        const mainStyles = document.createElement('style');
-        mainStyles.textContent = `
-          html[data-theme="light"] react-scan-root::part(scan-root) {
-            --icon-color: rgba(0, 0, 0, 0.8);
-          }
-
-          html[data-theme="dark"] react-scan-root::part(scan-root) {
-            --icon-color: rgba(255, 255, 255, 0.8);
-          }
-        `;
-        document.head.appendChild(mainStyles);
 
         const existingOverlay = document.querySelector('react-scan-overlay');
         if (existingOverlay) {
@@ -545,6 +544,7 @@ export const start = () => {
         // don't draw if it's paused
         return;
       }
+
       updateFiberRenderData(fiber, renders);
 
       if (isCompositeFiber(fiber)) {
@@ -567,8 +567,6 @@ export const start = () => {
           renders,
         });
 
-        // - audio context can take up an insane amount of cpu, todo: figure out why
-        // - we may want to take this out of hot path
         if (ReactScanInternals.options.value.playSound && audioContext) {
           const renderTimeThreshold = 10;
           const amplitude = Math.min(
@@ -588,7 +586,8 @@ export const start = () => {
   ReactScanInternals.instrumentation = instrumentation;
 
   // TODO: add an visual error indicator that it didn't load
-  if (!Store.monitor.value) {
+  const isUsedInBrowserExtension = typeof window !== 'undefined' && window.isReactScanExtension;
+  if (!Store.monitor.value && !isUsedInBrowserExtension) {
     setTimeout(() => {
       if (isInstrumentationActive()) return;
       // eslint-disable-next-line no-console
