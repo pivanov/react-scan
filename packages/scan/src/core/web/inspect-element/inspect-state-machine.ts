@@ -305,7 +305,6 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
           const { parentCompositeFiber } = getCompositeComponentFromElement(element);
 
           if (!parentCompositeFiber) return;
-          console.log(parentCompositeFiber);
 
           const didRender = didFiberRender(parentCompositeFiber);
           renderPropsAndState(didRender, parentCompositeFiber);

@@ -1,7 +1,8 @@
-import { type Fiber } from 'react-reconciler';
+import type { Fiber } from 'react-reconciler';
 import { createHTMLTemplate } from '@web-utils/html-template';
 import { fastSerialize } from '../../instrumentation';
 import { Store } from '../../index';
+import { type ChangeTracker } from './types';
 import {
   getChangedProps,
   getChangedState,
@@ -15,7 +16,7 @@ import {
 const EXPANDED_PATHS = new Set<string>();
 const fadeOutTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
-export const cumulativeChanges = {
+export const cumulativeChanges: ChangeTracker = {
   props: new Map<string, number>(),
   state: new Map<string, number>(),
   context: new Map<string, number>(),
@@ -388,10 +389,10 @@ const renderSection = (
   fiber: Fiber,
   propContainer: HTMLDivElement,
   title: string,
-  data: any,
+  data: Record<string, any>,
   changedKeys: Set<string>,
   changedContext: Set<string> = new Set(),
-) => {
+): HTMLElement => {
   const section = templates.section();
   section.dataset.section = title;
 
@@ -433,7 +434,7 @@ const getPath = (
   section: string,
   parentPath: string,
   key: string,
-) => {
+): string => {
   return parentPath
     ? `${componentName}.${parentPath}.${key}`
     : `${componentName}.${section}.${key}`;
@@ -449,16 +450,16 @@ export const createPropertyElement = (
   componentName: string,
   didRender: boolean,
   propsContainer: HTMLDivElement,
-  fiber: any,
+  fiber: Fiber,
   key: string,
   value: any,
   section = '',
   level = 0,
-  changedKeys: Set<string> = new Set(),
+  changedKeys = new Set<string>(),
   parentPath = '',
-  objectPathMap: WeakMap<object, Set<string>> = new WeakMap(),
+  objectPathMap = new WeakMap<object, Set<string>>(),
   hasCumulativeChanges = false,
-) => {
+): HTMLElement | null => {
   try {
     if (!changedAtInterval) {
       changedAtInterval = setInterval(() => {
@@ -828,7 +829,7 @@ export const createPropertyElement = (
   }
 };
 
-const createCircularReferenceElement = (key: string) => {
+const createCircularReferenceElement = (key: string): HTMLElement => {
   const container = templates.propertyContainer();
 
   const preview = templates.previewLine();
@@ -839,7 +840,7 @@ const createCircularReferenceElement = (key: string) => {
   return container;
 };
 
-export const getValueClassName = (value: any) => {
+export const getValueClassName = (value: unknown): string => {
   if (Array.isArray(value)) return 'react-scan-array';
   if (value === null || value === undefined) return 'react-scan-null';
   switch (typeof value) {
@@ -856,7 +857,7 @@ export const getValueClassName = (value: any) => {
   }
 };
 
-export const getValuePreview = (value: any) => {
+export const getValuePreview = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `Array(${value.length})`;
   }
