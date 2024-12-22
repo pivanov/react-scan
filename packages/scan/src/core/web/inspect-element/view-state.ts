@@ -1,7 +1,7 @@
 import type { Fiber } from 'react-reconciler';
 import { createHTMLTemplate } from '@web-utils/html-template';
+import { Store } from 'src/core';
 import { fastSerialize } from '../../instrumentation';
-import { Store } from '../../index';
 import { type ChangeTracker } from './types';
 import {
   getChangedProps,
@@ -96,6 +96,9 @@ const templates = {
   )
 };
 
+// Track previous values to detect actual changes
+let lastInspectedFiber: Fiber | null = null;
+
 export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propContainer = Store.inspectState.value.propContainer;
   if (!propContainer) return;
@@ -103,13 +106,22 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const componentName = fiber.type?.displayName || fiber.type?.name || 'Unknown';
   const componentKey = String(fiber.alternate?._debugID ?? fiber._debugID ?? '');
 
+  // Get render data from Store
+  const reportData = Store.reportData.get(fiber);
+  const renderCount = reportData?.count ?? 0;
+
+  // Reset tracking if we switched to a different component
+  if (lastInspectedFiber?.type !== fiber.type) {
+    cumulativeChanges.state.clear();
+    cumulativeChanges.context.clear();
+    cumulativeChanges.props.clear();
+  }
+  lastInspectedFiber = fiber;
+
   // Get current changes
   const changedProps = new Set(getChangedProps(fiber));
   const changedState = new Set(getChangedState(fiber));
   const changedContext = new Set(getChangedContext(fiber));
-
-  // Get render data from Store
-  const reportData = Store.reportData.get(fiber);
 
   propContainer.innerHTML = '';
 
@@ -118,6 +130,22 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   whatChangedSection.open = Store.wasDetailsOpen.value;
 
   let hasAnyChanges = false;
+
+  // Track state changes
+  if (changedState.size > 0) {
+    changedState.forEach(key => {
+      const fullKey = `${componentKey}:${key}`;
+      cumulativeChanges.state.set(fullKey, renderCount);
+    });
+  }
+
+  // Similar changes for context tracking...
+  if (changedContext.size > 0) {
+    changedContext.forEach(key => {
+      const fullKey = `${componentKey}:${key}`;
+      cumulativeChanges.context.set(fullKey, renderCount);
+    });
+  }
 
   // Show all props that changed
   if (changedProps.size > 0) {
@@ -144,7 +172,7 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     }
   }
 
-  // Show all state that changed
+  // Make sure state changes are visible
   if (changedState.size > 0) {
     const stateHeader = templates.header();
     stateHeader.textContent = 'State:';
