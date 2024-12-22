@@ -1,14 +1,14 @@
 import {
-  ClassComponentTag,
-  ForwardRefTag,
-  FunctionComponentTag,
-  MemoComponentTag,
-  SimpleMemoComponentTag,
   isCompositeFiber,
   isHostFiber,
+  FunctionComponentTag,
+  ForwardRefTag,
+  SimpleMemoComponentTag,
+  MemoComponentTag,
+  ClassComponentTag,
   traverseFiber,
 } from 'bippy';
-import type { Fiber } from 'react-reconciler';
+import { type Fiber } from 'react-reconciler';
 import { ReactScanInternals, Store } from '../../index';
 
 interface OverrideMethods {
@@ -107,14 +107,65 @@ export const getParentCompositeFiber = (fiber: Fiber) => {
   }
 };
 
-export const getChangedProps = (fiber: Fiber): Set<string> => {
-  const changes = new Set<string>();
+interface PropChange {
+  name: string;
+  value: any;
+  prevValue?: any;
+}
+
+export const getChangedPropsDetailed = (fiber: Fiber): Array<PropChange> => {
   const currentProps = fiber.memoizedProps || {};
   const previousProps = fiber.alternate?.memoizedProps || {};
+  const changes: Array<PropChange> = [];
 
-  // TODO(Alexis): no union of keys check?
   for (const key in currentProps) {
-    if (currentProps[key] !== previousProps[key] && key !== 'children') {
+    if (key === 'children') continue;
+
+    const currentValue = currentProps[key];
+    const prevValue = previousProps[key];
+
+    if (!Object.is(currentValue, prevValue)) {
+      changes.push({
+        name: key,
+        value: currentValue,
+        prevValue
+      });
+    }
+  }
+
+  return changes;
+};
+
+export const getChangedProps = (fiber: Fiber): Set<string> => {
+  const currentProps = fiber.memoizedProps || {};
+  const previousProps = fiber.alternate?.memoizedProps || {};
+  const changes = new Set<string>();
+
+  // First check current vs previous props
+  for (const key in currentProps) {
+    if (key === 'children') continue;
+
+    const currentValue = currentProps[key];
+    const prevValue = previousProps[key];
+
+    // Use strict equality for functions to detect new references
+    if (typeof currentValue === 'function' || typeof prevValue === 'function') {
+      if (currentValue !== prevValue) {
+        changes.add(key);
+      }
+      continue;
+    }
+
+    // For other values, use Object.is for proper NaN handling
+    if (!Object.is(currentValue, prevValue)) {
+      changes.add(key);
+    }
+  }
+
+  // Also check if any previous props were removed
+  for (const key in previousProps) {
+    if (key === 'children') continue;
+    if (!(key in currentProps)) {
       changes.add(key);
     }
   }
@@ -122,23 +173,44 @@ export const getChangedProps = (fiber: Fiber): Set<string> => {
   return changes;
 };
 
-export const getStateFromFiber = (fiber: Fiber): any => {
+const STATE_NAME_REGEX = /\[(?<name>\w+),\s*set\w+\]/g;
+
+export const getStateNames = (fiber: Fiber): Array<string> => {
+  const componentSource = fiber.type?.toString?.() || '';
+  return componentSource ? Array.from(
+    componentSource.matchAll(STATE_NAME_REGEX),
+    (m: RegExpMatchArray) => m.groups?.name ?? ''
+  ) : [];
+};
+
+interface MemoizedState {
+  memoizedState: unknown;
+  queue: unknown;
+  next: MemoizedState | null;
+}
+
+interface ComponentState {
+  [key: string]: unknown;
+}
+
+export const getStateFromFiber = (fiber: Fiber | null): ComponentState => {
   if (!fiber) return {};
-  // only funtional components have memo tags,
+
   if (
     fiber.tag === FunctionComponentTag ||
     fiber.tag === ForwardRefTag ||
     fiber.tag === SimpleMemoComponentTag ||
     fiber.tag === MemoComponentTag
   ) {
-    // Functional component, need to traverse hooks
-    let memoizedState = fiber.memoizedState;
-    const state: any = {};
-    let index = 0;
+    let memoizedState = fiber.memoizedState as MemoizedState | null;
+    const state: ComponentState = {};
+    const stateNames = getStateNames(fiber);
 
+    let index = 0;
     while (memoizedState) {
       if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
-        state[index] = memoizedState.memoizedState;
+        const name = stateNames[index] ?? `state${index}`;
+        state[name] = memoizedState.memoizedState;
       }
       memoizedState = memoizedState.next;
       index++;
@@ -146,24 +218,30 @@ export const getStateFromFiber = (fiber: Fiber): any => {
 
     return state;
   } else if (fiber.tag === ClassComponentTag) {
-    // Class component, memoizedState is the component state
     return fiber.memoizedState || {};
   }
+
   return {};
 };
 
 export const getChangedState = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
+  let memoizedState = fiber.memoizedState as MemoizedState | null;
+  let previousState = fiber.alternate?.memoizedState as MemoizedState | null;
+  let index = 0;
 
-  const currentState = getStateFromFiber(fiber);
-  const previousState = fiber.alternate
-    ? getStateFromFiber(fiber.alternate)
-    : {};
+  const stateNames = getStateNames(fiber);
 
-  for (const key in currentState) {
-    if (currentState[key] !== previousState[key]) {
-      changes.add(key);
+  while (memoizedState && previousState) {
+    if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
+      const name = stateNames[index] ?? `state${index}`;
+      if (!Object.is(memoizedState.memoizedState, previousState.memoizedState)) {
+        changes.add(name);
+      }
     }
+    memoizedState = memoizedState.next;
+    previousState = previousState.next;
+    index++;
   }
 
   return changes;
@@ -225,38 +303,130 @@ export const getCompositeComponentFromElement = (element: Element) => {
   };
 };
 
-export const getAllFiberContexts = (fiber: Fiber): Map<any, unknown> => {
-  const contexts = new Map<any, unknown>();
+interface ContextDependency {
+  context: {
+    _currentValue: any;
+    displayName?: string;
+  };
+  next: ContextDependency | null;
+}
 
+interface ContextValue {
+  displayValue: Record<string, unknown>;
+  actions?: Record<string, (...args: Array<any>) => unknown>;
+  isUserContext?: boolean;
+  rawValue?: unknown;
+}
+
+interface ContextType {
+  displayName?: string;
+  _currentValue: unknown;
+  Provider?: unknown;
+  Consumer?: unknown;
+}
+
+const ensureRecord = (value: unknown): Record<string, unknown> => {
+  if (value === null || value === undefined) {
+    return {};
+  }
+  if (typeof value === 'object' && value !== null) {
+    return value as Record<string, unknown>;
+  }
+  return { value };
+};
+
+export const getAllFiberContexts = (fiber: Fiber): Map<string, ContextValue> => {
+  const contexts = new Map<string, ContextValue>();
   if (!fiber) return contexts;
 
-  let currentFiber: Fiber | null = fiber;
+  const findProviderValue = (contextType: ContextType): {
+    value: ContextValue;
+    displayName: string;
+  } | null => {
+    let searchFiber: Fiber | null = fiber;
+    while (searchFiber) {
+      if (searchFiber.type?.Provider) {
+        const providerValue = searchFiber.memoizedProps?.value;
+        const pendingValue = searchFiber.pendingProps?.value;
+        const currentValue = contextType._currentValue;
 
-  while (currentFiber) {
-    const dependencies = currentFiber.dependencies;
-    if (dependencies?.firstContext) {
-      let contextItem: any = dependencies.firstContext;
-
-      while (contextItem) {
-        const contextType = contextItem.context;
-        // The actual value is stored in _currentValue or _currentValue2 depending on the thread
-        const contextValue = contextType._currentValue;
-
-        if (!contexts.has(contextType)) {
-          contexts.set(contextType, contextValue);
+        // For built-in contexts
+        if (contextType.displayName) {
+          if (currentValue === null) {
+            return null;
+          }
+          return {
+            value: {
+              displayValue: ensureRecord(currentValue),
+              isUserContext: false,
+              rawValue: currentValue
+            },
+            displayName: contextType.displayName
+          };
         }
 
-        contextItem = contextItem.next;
+        // For user-defined contexts
+        const providerName = searchFiber.type.name?.replace('Provider', '') ??
+          searchFiber._debugOwner?.type?.name ??
+          'Unnamed';
+
+        const valueToUse = pendingValue !== undefined ? pendingValue :
+          providerValue !== undefined ? providerValue :
+            currentValue;
+
+        return {
+          value: {
+            displayValue: ensureRecord(valueToUse),
+            isUserContext: true,
+            rawValue: valueToUse
+          },
+          displayName: providerName
+        };
+      }
+      searchFiber = searchFiber.return;
+    }
+
+    return {
+      value: {
+        displayValue: ensureRecord(contextType._currentValue),
+        isUserContext: false,
+        rawValue: contextType._currentValue
+      },
+      displayName: contextType.displayName ?? 'Unnamed'
+    };
+  };
+
+  const processContext = (contextType: ContextType) => {
+    if (contextType && contextType._currentValue !== undefined) {
+      if ('Consumer' in contextType && 'Provider' in contextType) {
+        const result = findProviderValue(contextType);
+        if (result) {
+          contexts.set(result.displayName, result.value);
+        }
+      }
+    }
+  };
+
+  let currentFiber: Fiber | null = fiber;
+  while (currentFiber) {
+    if (currentFiber.memoizedState) {
+      let memoizedState = currentFiber.memoizedState;
+      while (memoizedState) {
+        if (memoizedState.queue === null && memoizedState.memoizedState !== undefined) {
+          const contextType = memoizedState.dependencies?.context;
+          if (contextType) {
+            processContext(contextType as ContextType);
+          }
+        }
+        memoizedState = memoizedState.next;
       }
     }
 
-    // Check for context providers
-    if (currentFiber.type?._context) {
-      const providerContext = currentFiber.type._context;
-      const providerValue = currentFiber.memoizedProps?.value;
-
-      if (!contexts.has(providerContext)) {
-        contexts.set(providerContext, providerValue);
+    if (currentFiber.dependencies?.firstContext) {
+      let contextItem: ContextDependency | null = currentFiber.dependencies.firstContext;
+      while (contextItem !== null) {
+        processContext(contextItem.context as ContextType);
+        contextItem = contextItem.next;
       }
     }
 
@@ -265,6 +435,52 @@ export const getAllFiberContexts = (fiber: Fiber): Map<any, unknown> => {
 
   return contexts;
 };
+
+export const getChangedContext = (fiber: Fiber): Set<string> => {
+  const changes = new Set<string>();
+
+  if (!fiber.alternate) return changes;
+
+  const currentContexts = getAllFiberContexts(fiber);
+  const _previousContexts = getAllFiberContexts(fiber.alternate);
+
+  currentContexts.forEach((currentValue, contextType) => {
+    const contextName = (typeof contextType === 'object' && contextType !== null)
+      ? (contextType as any)?.displayName ??
+      (contextType as any)?.Provider?.displayName ??
+      (contextType as any)?.Consumer?.displayName ??
+      (contextType as any)?.type?.name?.replace('Provider', '') ??
+      'Unnamed'
+      : contextType;
+
+    // Find the provider in the fiber tree
+    let searchFiber: Fiber | null = fiber;
+    let providerFiber: Fiber | null = null;
+
+    while (searchFiber) {
+      if (searchFiber.type?.Provider) {
+        providerFiber = searchFiber;
+        break;
+      }
+      searchFiber = searchFiber.return;
+    }
+
+    // Compare current and alternate values if provider is found
+    if (providerFiber && providerFiber.alternate) {
+      const currentProviderValue = providerFiber.memoizedProps?.value;
+      const alternateValue = providerFiber.alternate.memoizedProps?.value;
+
+      if (!Object.is(currentProviderValue, alternateValue)) {
+        changes.add(contextName);
+      }
+    }
+  });
+
+  return changes;
+};
+
+export const isValidObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object';
 
 export const hasValidParent = () => {
   if (Store.inspectState.value.kind !== 'focused') {
@@ -297,33 +513,20 @@ export const hasValidParent = () => {
 export const getOverrideMethods = (): OverrideMethods => {
   let overrideProps = null;
   let overrideHookState = null;
+
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
     const { renderers } = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (renderers) {
+      // Get the react-dom renderer (bundleType: 1)
       for (const [_, renderer] of Array.from(renderers)) {
         try {
-          if (overrideProps) {
-            const prevOverrideProps = overrideProps;
-            overrideProps = (fiber: Fiber, key: string, value: any) => {
-              prevOverrideProps(fiber, key, value);
-              // @ts-expect-error - renderer.overrideProps is not typed
-              renderer.overrideProps(fiber, key, value);
-            };
-          } else {
-            // @ts-expect-error - renderer.overrideProps is not typed
+          // @ts-expect-error - bundleType is not typed
+          if (renderer.bundleType === 1 && renderer.rendererPackageName === 'react-dom') {
+          // @ts-expect-error - renderer methods are not typed
             overrideProps = renderer.overrideProps;
-          }
-
-          if (overrideHookState) {
-            const prevOverrideHookState = overrideHookState;
-            overrideHookState = (fiber: Fiber, key: string, value: any) => {
-              prevOverrideHookState(fiber, key, value);
-              // @ts-expect-error - renderer.overrideHookState is not typed
-              renderer.overrideHookState(fiber, key, value);
-            };
-          } else {
-            // @ts-expect-error - renderer.overrideHookState is not typed
+            // @ts-expect-error - renderer methods are not typed
             overrideHookState = renderer.overrideHookState;
+            break;
           }
         } catch (e) {
           /**/

@@ -53,6 +53,11 @@ function TodoList({ items, onDelete }: {
         <TodoItem
           key={todo.id}
           todo={todo}
+          obj={{
+            pivanov: {
+              more: 'value'
+            }
+          }}
           onDelete={() => onDelete(todo.id)}
         />
       ))}
@@ -60,8 +65,9 @@ function TodoList({ items, onDelete }: {
   );
 }
 
-function TodoItem({ todo, onDelete }: {
+function TodoItem({ todo, onDelete, obj }: {
   todo: Todo;
+  obj: any;
   onDelete: () => void;
 }) {
   return (
@@ -70,6 +76,7 @@ function TodoItem({ todo, onDelete }: {
         <div>{todo.text}</div>
         <div className="text-xs text-gray-500">
           {todo.timestamp.toLocaleTimeString()}
+          {JSON.stringify(obj, null, 2)}
         </div>
       </div>
       <button

@@ -8,7 +8,7 @@ import {
   updateCanvasSize,
 } from './overlay';
 import { getCompositeComponentFromElement } from './utils';
-import { renderPropsAndState } from './view-state';
+import { cumulativeChanges, renderPropsAndState } from './view-state';
 
 export type States =
   | {
@@ -132,7 +132,6 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
   let previousState: typeof Store.inspectState.value.kind;
 
   const repaint = throttle(() => {
-    // todo: make inspect-off state act as 0 perf hit since it does nothing
     const unSub = (() => {
       const inspectState = Store.inspectState.value;
       switch (inspectState.kind) {
@@ -303,16 +302,12 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
           );
 
           const element = inspectState.focusedDomElement;
+          const { parentCompositeFiber } = getCompositeComponentFromElement(element);
 
-          const { parentCompositeFiber } =
-            getCompositeComponentFromElement(element);
+          if (!parentCompositeFiber) return;
+          console.log(parentCompositeFiber);
 
-          if (!parentCompositeFiber) {
-            return;
-          }
-
-          const didRender = didFiberRender(parentCompositeFiber); // because we react to any change, not just this fibers change, we need this check to know if the current fiber re-rendered for this publish
-
+          const didRender = didFiberRender(parentCompositeFiber);
           renderPropsAndState(didRender, parentCompositeFiber);
 
           const keyDown = (e: KeyboardEvent) => {
@@ -411,10 +406,31 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
       (unsubscribeFns as any)[Store.inspectState.value.kind] = unSub;
     }
     previousState = Store.inspectState.value.kind;
-  }, 70);
+  }, 0);
 
+  // Simple subscriptions
   Store.inspectState.subscribe(repaint);
-  Store.lastReportTime.subscribe(repaint);
+  Store.lastReportTime.subscribe(() => {
+    const inspectState = Store.inspectState.value;
+    if (inspectState.kind === 'focused') {
+      const element = inspectState.focusedDomElement;
+      const { parentCompositeFiber } = getCompositeComponentFromElement(element);
+
+      if (parentCompositeFiber) {
+        const didRender = didFiberRender(parentCompositeFiber);
+        renderPropsAndState(didRender, parentCompositeFiber);
+      }
+    }
+  });
+
+  Store.inspectState.subscribe((state) => {
+    if (state.kind === 'inspect-off') {
+      // Clear counters when inspection is turned off
+      cumulativeChanges.props.clear();
+      cumulativeChanges.state.clear();
+      cumulativeChanges.context.clear();
+    }
+  });
 
   return () => {
     /**/

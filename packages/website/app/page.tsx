@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import Companies from '@/components/companies';
 import CLI from '@/components/cli';
 import TodoDemo from '@/components/todo-demo';
+import ContextDemo from '../components/context-demo';
 
 export default function Home() {
   const [showDemo, setShowDemo] = useState(false);
@@ -22,6 +23,8 @@ export default function Home() {
 
   return (
     <div className="mx-auto max-w-xl">
+      <ContextDemo />
+
       <div className="mt-8 space-y-4">
         <div>
           React Scan automatically detects performance issues in your React app{' '}
@@ -34,6 +37,7 @@ export default function Home() {
             </button>
           </div>
         </div>
+
 
         <div>
           Previously, existing tools required lots of code change, lacked simple

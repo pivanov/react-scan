@@ -1,12 +1,15 @@
+import { type Fiber } from 'react-reconciler';
 import { createHTMLTemplate } from '@web-utils/html-template';
-import { Store } from '../../index';
 import { fastSerialize } from '../../instrumentation';
+import { Store } from '../../index';
 import {
-  getAllFiberContexts,
   getChangedProps,
   getChangedState,
-  getOverrideMethods,
+  getChangedContext,
   getStateFromFiber,
+  getOverrideMethods,
+  getAllFiberContexts,
+  getStateNames,
 } from './utils';
 
 const EXPANDED_PATHS = new Set<string>();
@@ -18,157 +21,211 @@ export const cumulativeChanges = {
   context: new Map<string, number>(),
 };
 
-const createWhatsChangedSection = createHTMLTemplate<HTMLDetailsElement>(
-  '<details class=react-scan-what-changed style="background-color:#b8860b;color:#ffff00;padding:5px"><summary class=font-bold>What changed?',
-  false,
-);
+const templates = {
+  whatChangedSection: createHTMLTemplate<HTMLDetailsElement>(
+    `<details class="react-scan-what-changed" style="background-color:#b8860b;color:#ffff00;padding:5px">
+      <summary class="font-bold">What changed?</summary>
+    </details>`,
+    false
+  ),
 
-const createPropsHeader = createHTMLTemplate<HTMLDivElement>(
-  '<div>Props:',
-  false,
-);
+  changeList: createHTMLTemplate<HTMLUListElement>(
+    '<ul style="list-style-type:disc;padding-left:20px"></ul>',
+    false
+  ),
 
-const createChangeList = createHTMLTemplate<HTMLUListElement>(
-  '<ul style="list-style-type:disc;padding-left:20px">',
-  false,
-);
+  propertyContainer: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-property">',
+    false
+  ),
 
-const createStateHeader = createHTMLTemplate<HTMLDivElement>(
-  '<div>State:',
-  false,
-);
+  previewLine: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-preview-line">',
+    false
+  ),
 
-const createContextHeader = createHTMLTemplate<HTMLDivElement>(
-  '<div>State:',
-  false,
-);
+  arrow: createHTMLTemplate<HTMLSpanElement>(
+    '<span class="react-scan-arrow">',
+    false
+  ),
 
-export const renderPropsAndState = (didRender: boolean, fiber: any) => {
+  propertyContent: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-property-content">',
+    false
+  ),
+
+  nestedObject: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-nested-object">',
+    false
+  ),
+
+  inspector: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-inspector">',
+    false
+  ),
+
+  content: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-content">',
+    false
+  ),
+
+  header: createHTMLTemplate<HTMLDivElement>(
+    '<div>',
+    false
+  ),
+
+  flashOverlay: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-flash-overlay">',
+    false
+  ),
+
+  listItem: createHTMLTemplate<HTMLLIElement>(
+    '<li>',
+    false
+  ),
+
+  input: createHTMLTemplate<HTMLInputElement>(
+    '<input type="text" class="react-scan-input">',
+    false
+  ),
+
+  section: createHTMLTemplate<HTMLDivElement>(
+    '<div class="react-scan-section">',
+    false
+  )
+};
+
+export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propContainer = Store.inspectState.value.propContainer;
+  if (!propContainer) return;
 
-  if (!propContainer) {
-    return;
-  }
+  const componentName = fiber.type?.displayName || fiber.type?.name || 'Unknown';
+  const componentKey = String(fiber.alternate?._debugID ?? fiber._debugID ?? '');
 
-  const fiberContext = tryOrElse(
-    () => Array.from(getAllFiberContexts(fiber).entries()).map((x) => x[1]),
-    [],
-  );
-
-  const componentName =
-    fiber.type?.displayName || fiber.type?.name || 'Unknown';
-  const props = fiber.memoizedProps || {};
-  const state = getStateFromFiber(fiber) || {};
-
+  // Get current changes
   const changedProps = new Set(getChangedProps(fiber));
   const changedState = new Set(getChangedState(fiber));
-  // Empty??
-  const changedContext = new Set<string>();
+  const changedContext = new Set(getChangedContext(fiber));
 
-  for (const key of changedProps) {
-    cumulativeChanges.props.set(
-      key,
-      (cumulativeChanges.props.get(key) ?? 0) + 1,
-    );
-  }
-
-  for (const key of changedState) {
-    cumulativeChanges.state.set(
-      key,
-      (cumulativeChanges.state.get(key) ?? 0) + 1,
-    );
-  }
-
-  // FIXME(Alexis): changedContext is empty, this block is no-op
-  for (const key of changedContext) {
-    cumulativeChanges.context.set(
-      key,
-      (cumulativeChanges.context.get(key) ?? 0) + 1,
-    );
-  }
+  // Get render data from Store
+  const reportData = Store.reportData.get(fiber);
 
   propContainer.innerHTML = '';
 
-  const changedItems: Array<string> = [];
-
-  if (cumulativeChanges.props.size > 0) {
-    for (const [key, count] of cumulativeChanges.props) {
-      changedItems.push(`Prop: ${key} ×${count}`);
-    }
-  }
-
-  if (cumulativeChanges.state.size > 0) {
-    for (const [key, count] of cumulativeChanges.state) {
-      changedItems.push(`State: ${key} ×${count}`);
-    }
-  }
-
-  if (cumulativeChanges.context.size > 0) {
-    for (const [key, count] of cumulativeChanges.context) {
-      changedItems.push(`Context: ${key} ×${count}`);
-    }
-  }
-
-  const whatChangedSection = createWhatsChangedSection();
+  // Create what changed section using template
+  const whatChangedSection = templates.whatChangedSection();
   whatChangedSection.open = Store.wasDetailsOpen.value;
 
-  if (cumulativeChanges.props.size > 0) {
-    const propsHeader = createPropsHeader();
-    const propsList = createChangeList();
+  let hasAnyChanges = false;
 
-    for (const [key, count] of cumulativeChanges.props) {
-      const li = document.createElement('li');
-      li.textContent = `${key} ×${count}`;
-      propsList.appendChild(li);
+  // Show all props that changed
+  if (changedProps.size > 0) {
+    const propsHeader = templates.header();
+    propsHeader.textContent = 'Props:';
+    const propsList = templates.changeList();
+
+    let hasVisibleProps = false;
+    changedProps.forEach(key => {
+      const count = reportData?.count || 0;
+
+      if (count > 0) {
+        hasVisibleProps = true;
+        hasAnyChanges = true;
+        const li = templates.listItem();
+        li.textContent = `${key} ×${count}`;
+        propsList.appendChild(li);
+      }
+    });
+
+    if (hasVisibleProps) {
+      whatChangedSection.appendChild(propsHeader);
+      whatChangedSection.appendChild(propsList);
     }
-
-    whatChangedSection.appendChild(propsHeader);
-    whatChangedSection.appendChild(propsList);
   }
 
-  if (cumulativeChanges.state.size > 0) {
-    const stateHeader = createStateHeader();
-    const stateList = createChangeList();
+  // Show all state that changed
+  if (changedState.size > 0) {
+    const stateHeader = templates.header();
+    stateHeader.textContent = 'State:';
+    const stateList = templates.changeList();
 
-    for (const [key, count] of cumulativeChanges.state) {
-      const li = document.createElement('li');
-      li.textContent = `${key} ×${count}`;
-      stateList.appendChild(li);
+    let hasVisibleState = false;
+    changedState.forEach(key => {
+      const fullKey = `${componentKey}:${key}`;
+      const count = cumulativeChanges.state.get(fullKey) ?? 0;
+
+      if (count > 0) {
+        hasVisibleState = true;
+        hasAnyChanges = true;
+        const li = templates.listItem();
+        li.textContent = `${key} ×${count}`;
+        stateList.appendChild(li);
+      }
+    });
+
+    if (hasVisibleState) {
+      whatChangedSection.appendChild(stateHeader);
+      whatChangedSection.appendChild(stateList);
     }
-
-    whatChangedSection.appendChild(stateHeader);
-    whatChangedSection.appendChild(stateList);
   }
 
-  if (cumulativeChanges.context.size > 0) {
-    const contextHeader = createContextHeader();
-    const contextList = createChangeList();
+  // Show context that changed
+  if (changedContext.size > 0) {
+    const contextHeader = templates.header();
+    contextHeader.textContent = 'Context:';
+    const contextList = templates.changeList();
 
-    for (const [key, count] of cumulativeChanges.context) {
-      const li = document.createElement('li');
-      li.textContent = `${key} ×${count}`;
-      contextList.appendChild(li);
+    let hasVisibleContext = false;
+    changedContext.forEach(key => {
+      if (key.startsWith('context.')) {
+        const fullKey = `${componentKey}:${key}`;
+        const count = cumulativeChanges.context.get(fullKey) ?? 0;
+
+        if (count > 0) {
+          hasVisibleContext = true;
+          hasAnyChanges = true;
+          const li = templates.listItem();
+          li.textContent = `${key.replace('context.', '')} ×${count}`;
+          contextList.appendChild(li);
+        }
+      } else {
+        const fullKey = `${componentKey}:${key}`;
+        const count = cumulativeChanges.context.get(fullKey) ?? 0;
+
+        if (count > 0) {
+          hasVisibleContext = true;
+          hasAnyChanges = true;
+          const li = templates.listItem();
+          li.textContent = `${key} ×${count}`;
+          contextList.appendChild(li);
+        }
+      }
+    });
+
+    if (hasVisibleContext) {
+      whatChangedSection.appendChild(contextHeader);
+      whatChangedSection.appendChild(contextList);
     }
-
-    whatChangedSection.appendChild(contextHeader);
-    whatChangedSection.appendChild(contextList);
   }
 
+  // Add back the toggle listener
   whatChangedSection.addEventListener('toggle', () => {
     Store.wasDetailsOpen.value = whatChangedSection.open;
   });
 
-  propContainer.appendChild(whatChangedSection);
+  // Only append the section if we have any changes to show
+  if (hasAnyChanges) {
+    propContainer.appendChild(whatChangedSection);
+  }
 
-  const inspector = document.createElement('div');
-  inspector.className = 'react-scan-inspector';
-
-  const content = document.createElement('div');
-  content.className = 'react-scan-content';
+  // Create inspector section
+  const inspector = templates.inspector();
+  const content = templates.content();
 
   const sections: Array<{ element: HTMLElement; hasChanges: boolean }> = [];
 
-  if (Object.values(props).length) {
+  // Props section
+  if (Object.values(fiber.memoizedProps || {}).length) {
     tryOrElse(() => {
       sections.push({
         element: renderSection(
@@ -177,50 +234,43 @@ export const renderPropsAndState = (didRender: boolean, fiber: any) => {
           fiber,
           propContainer,
           'Props',
-          props,
+          fiber.memoizedProps || {},
           changedProps,
+          changedContext,
         ),
         hasChanges: changedProps.size > 0,
       });
     }, null);
   }
 
-  if (fiberContext.length) {
+  // Context section
+  if (Array.from(getAllFiberContexts(fiber).entries()).length) {
     tryOrElse(() => {
-      const changedKeys = new Set<string>();
+      const contextObj: Record<string, any> = {};
 
-      const contextObj = Object.fromEntries(
-        fiberContext.map((val, idx) => {
-          const key = idx.toString();
-          return [key, val];
-        }),
-      );
+      Array.from(getAllFiberContexts(fiber).entries()).forEach(([contextType, value]) => {
+        const contextKey = (typeof contextType === 'object' && contextType !== null)
+          ? (contextType as any)?.displayName ??
+          (contextType as any)?.Provider?.displayName ??
+          (contextType as any)?.Consumer?.displayName ??
+          'UnnamedContext'
+          : contextType;
 
-      for (const [key, value] of Object.entries(contextObj)) {
-        const path = `${componentName}.context.${key}`;
-        const lastValue = lastRendered.get(path);
-        const isChanged =
-          lastValue !== undefined && lastValue !== contextObj[key];
-        const isBadRender =
-          isChanged &&
-          ['object', 'function'].includes(typeof lastValue) &&
-          fastSerialize(lastValue) === fastSerialize(contextObj[key]);
+        const processValue = (val: any): any => {
+          if (typeof val === 'function') {
+            return '[Function]';
+          }
+          if (typeof val === 'object' && val !== null) {
+            return Object.entries(val).reduce((acc, [k, v]) => ({
+              ...acc,
+              [k]: processValue(v)
+            }), {});
+          }
+          return val;
+        };
 
-        if (isChanged) {
-          changedKeys.add(key);
-          changedAt.set(path, Date.now());
-        }
-
-        if (isBadRender) {
-          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-          delete contextObj[key];
-          const newKey = `⚠️ ${key}`;
-          contextObj[newKey] = value;
-          changedAt.set(`${componentName}.context.${key}`, Date.now());
-        }
-
-        lastRendered.set(path, value);
-      }
+        contextObj[contextKey] = processValue(value.displayValue);
+      });
 
       sections.push({
         element: renderSection(
@@ -230,18 +280,20 @@ export const renderPropsAndState = (didRender: boolean, fiber: any) => {
           propContainer,
           'Context',
           contextObj,
-          changedKeys,
+          changedContext,
         ),
-        hasChanges: changedKeys.size > 0,
+        hasChanges: changedContext.size > 0,
       });
     }, null);
   }
 
-  if (Object.values(state).length) {
+  // State section
+  const currentState = getStateFromFiber(fiber);
+  if (currentState && Object.values(currentState).length > 0) {
     tryOrElse(() => {
-      const stateObj = Array.isArray(state)
-        ? Object.fromEntries(state.map((val, idx) => [idx.toString(), val]))
-        : state;
+      const stateObj = Array.isArray(currentState)
+        ? Object.fromEntries(currentState.map((val: unknown, idx: number) => [idx.toString(), val]))
+        : currentState;
 
       for (const [key, value] of Object.entries(stateObj)) {
         const path = `${componentName}.state.${key}`;
@@ -267,65 +319,53 @@ export const renderPropsAndState = (didRender: boolean, fiber: any) => {
     }, null);
   }
 
-  for (const section of sections) {
-    content.appendChild(section.element);
-  }
-
+  sections.forEach((section) => content.appendChild(section.element));
   inspector.appendChild(content);
-
   propContainer.appendChild(inspector);
 };
 
-const renderSection = (
-  componentName: string,
-  didRender: boolean,
-  fiber: any,
-  propsContainer: HTMLDivElement,
-  title: string,
-  data: any,
-  changedKeys: Set<string> = new Set(),
-) => {
-  const section = document.createElement('div');
-  section.className = 'react-scan-section';
-  section.dataset.section = title;
+export const replayComponent = async (fiber: any) => {
+  try {
+    const { overrideProps, overrideHookState } = getOverrideMethods();
+    if (!overrideProps || !overrideHookState || !fiber) return;
 
-  for (const key in data) {
-    const value = data[key];
-    const el = createPropertyElement(
-      componentName,
-      didRender,
-      propsContainer,
-      fiber,
-      key,
-      value,
-      title.toLowerCase(),
-      0,
-      changedKeys,
-      '',
-      new WeakMap(),
-    );
-    if (el) {
-      section.appendChild(el);
+    const currentProps = fiber.memoizedProps || {};
+
+    try {
+      Object.keys(currentProps).forEach((key) => {
+        overrideProps(fiber, [key], currentProps[key]);
+      });
+    } catch (e) {
+      /**/
     }
+
+    try {
+      const state = getStateFromFiber(fiber) || {};
+      Object.keys(state).forEach((key) => {
+        overrideHookState(fiber, key, [], state[key]);
+      });
+    } catch (e) {
+      /**/
+    }
+
+    try {
+      let child = fiber.child;
+      while (child) {
+        await replayComponent(child);
+        child = child.sibling;
+      }
+    } catch (e) {
+      /**/
+    }
+  } catch (e) {
+    /**/
   }
-
-  return section;
 };
 
-const getPath = (
-  componentName: string,
-  section: string,
-  parentPath: string,
-  key: string,
-) => {
-  return parentPath
-    ? `${componentName}.${parentPath}.${key}`
-    : `${componentName}.${section}.${key}`;
-};
 export const changedAt = new Map<string, number>();
+const lastRendered = new Map<string, unknown>();
 
 let changedAtInterval: ReturnType<typeof setInterval>;
-const lastRendered = new Map<string, unknown>();
 
 const tryOrElse = <T, E>(cb: () => T, val: E) => {
   try {
@@ -342,35 +382,68 @@ const isPromise = (value: any): value is Promise<unknown> => {
   );
 };
 
-const createScanPropertyContainer = createHTMLTemplate<HTMLDivElement>(
-  '<div class=react-scan-property>',
-  false,
-);
+const renderSection = (
+  componentName: string,
+  didRender: boolean,
+  fiber: Fiber,
+  propContainer: HTMLDivElement,
+  title: string,
+  data: any,
+  changedKeys: Set<string>,
+  changedContext: Set<string> = new Set(),
+) => {
+  const section = templates.section();
+  section.dataset.section = title;
 
-const createScanArrow = createHTMLTemplate<HTMLSpanElement>(
-  '<span class=react-scan-arrow>',
-  false,
-);
+  const entries = Object.entries(data);
 
-const createScanPropertyContent = createHTMLTemplate<HTMLDivElement>(
-  '<div class=react-scan-property-content>',
-  false,
-);
+  entries.forEach(([key, value]) => {
+    const isContextSection = title.toLowerCase() === 'context';
+    const isPropsSection = title.toLowerCase() === 'props';
 
-const createScanPreviewLine = createHTMLTemplate<HTMLDivElement>(
-  '<div class=react-scan-preview-line>',
-  false,
-);
+    // For Props section, use alternate fiber for previous values
+    const displayValue = isPropsSection
+      ? fiber.alternate?.memoizedProps?.[key] ?? value
+      : value;
 
-const createScanInput = createHTMLTemplate<HTMLInputElement>(
-  '<input type=text class=react-scan-input>',
-  false,
-);
+    const el = createPropertyElement(
+      componentName,
+      didRender,
+      propContainer,
+      fiber,
+      key,
+      displayValue,
+      title.toLowerCase(),
+      0,
+      isContextSection ? changedContext : changedKeys,
+      '',
+      new WeakMap(),
+      true
+    );
 
-const createScanFlashOverlay = createHTMLTemplate<HTMLDivElement>(
-  '<div class=react-scan-flash-overlay>',
-  false,
-);
+    if (!el) return;
+    section.appendChild(el);
+  });
+
+  return section;
+};
+
+const getPath = (
+  componentName: string,
+  section: string,
+  parentPath: string,
+  key: string,
+) => {
+  return parentPath
+    ? `${componentName}.${parentPath}.${key}`
+    : `${componentName}.${section}.${key}`;
+};
+
+const isEditableValue = (value: unknown): boolean => {
+  return typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean';
+};
 
 export const createPropertyElement = (
   componentName: string,
@@ -384,18 +457,20 @@ export const createPropertyElement = (
   changedKeys: Set<string> = new Set(),
   parentPath = '',
   objectPathMap: WeakMap<object, Set<string>> = new WeakMap(),
+  hasCumulativeChanges = false,
 ) => {
   try {
     if (!changedAtInterval) {
       changedAtInterval = setInterval(() => {
-        for (const [key, value] of changedAt) {
+        changedAt.forEach((value, key) => {
           if (Date.now() - value > 450) {
             changedAt.delete(key);
           }
-        }
+        });
       }, 200);
     }
-    const container = createScanPropertyContainer();
+
+    const container = templates.propertyContainer();
 
     const isExpandable =
       !isPromise(value) &&
@@ -412,7 +487,8 @@ export const createPropertyElement = (
       value &&
       ['object', 'function'].includes(typeof value) &&
       fastSerialize(value) === fastSerialize(prevValue) &&
-      isChanged;
+      isChanged &&
+      (changedKeys.has(key) || hasCumulativeChanges);
 
     lastRendered.set(currentPath, value);
 
@@ -436,13 +512,15 @@ export const createPropertyElement = (
         container.classList.add('react-scan-expanded');
       }
 
-      const arrow = createScanArrow();
-      const contentWrapper = createScanPropertyContent();
-      const preview = createScanPreviewLine();
+      const arrow = templates.arrow();
+      container.appendChild(arrow);
+
+      const contentWrapper = templates.propertyContent();
+
+      const preview = templates.previewLine();
       preview.dataset.key = key;
       preview.dataset.section = section;
 
-      // TODO(Alexis): perhaps appendChild
       preview.innerHTML = `
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
@@ -450,7 +528,7 @@ export const createPropertyElement = (
         )} react-scan-value truncate">${getValuePreview(value)}</span>
       `;
 
-      const content = document.createElement('div');
+      const content = templates.nestedObject();
       content.className = isExpanded
         ? 'react-scan-nested-object'
         : 'react-scan-nested-object react-scan-hidden';
@@ -461,28 +539,28 @@ export const createPropertyElement = (
 
       if (isExpanded) {
         if (Array.isArray(value)) {
-          for (let i = 0, len = value.length; i < len; i++) {
+          value.forEach((item, index) => {
             const el = createPropertyElement(
               componentName,
               didRender,
               propsContainer,
               fiber,
-              `${i}`,
-              value[i],
+              index.toString(),
+              item,
               section,
               level + 1,
               changedKeys,
               currentPath,
               objectPathMap,
+              hasCumulativeChanges,
             );
-            if (el) {
-              content.appendChild(el);
+            if (!el) {
+              return;
             }
-          }
+            content.appendChild(el);
+          });
         } else {
-          for (const k in value) {
-            const v = value[key];
-
+          Object.entries(value).forEach(([k, v]) => {
             const el = createPropertyElement(
               componentName,
               didRender,
@@ -495,11 +573,13 @@ export const createPropertyElement = (
               changedKeys,
               currentPath,
               objectPathMap,
+              hasCumulativeChanges,
             );
-            if (el) {
-              content.appendChild(el);
+            if (!el) {
+              return;
             }
-          }
+            content.appendChild(el);
+          });
         }
       }
 
@@ -517,27 +597,28 @@ export const createPropertyElement = (
 
           if (!content.hasChildNodes()) {
             if (Array.isArray(value)) {
-              for (let i = 0, len = value.length; i < len; i++) {
+              value.forEach((item, index) => {
                 const el = createPropertyElement(
                   componentName,
                   didRender,
                   propsContainer,
                   fiber,
-                  `${i}`,
-                  value[i],
+                  index.toString(),
+                  item,
                   section,
                   level + 1,
                   changedKeys,
                   currentPath,
                   new WeakMap(),
+                  hasCumulativeChanges,
                 );
-                if (el) {
-                  content.appendChild(el);
+                if (!el) {
+                  return;
                 }
-              }
+                content.appendChild(el);
+              });
             } else {
-              for (const k in value) {
-                const v = value[k];
+              Object.entries(value).forEach(([k, v]) => {
                 const el = createPropertyElement(
                   componentName,
                   didRender,
@@ -550,11 +631,13 @@ export const createPropertyElement = (
                   changedKeys,
                   currentPath,
                   new WeakMap(),
+                  hasCumulativeChanges,
                 );
-                if (el) {
-                  content.appendChild(el);
+                if (!el) {
+                  return;
                 }
-              }
+                content.appendChild(el);
+              });
             }
           }
         } else {
@@ -564,10 +647,9 @@ export const createPropertyElement = (
         }
       });
     } else {
-      const preview = createScanPreviewLine();
+      const preview = templates.previewLine();
       preview.dataset.key = key;
       preview.dataset.section = section;
-      // TODO(Alexis): perhaps appendChild
       preview.innerHTML = `
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
@@ -579,49 +661,134 @@ export const createPropertyElement = (
       if (section === 'props' || section === 'state') {
         const valueElement = preview.querySelector('.react-scan-value');
         const { overrideProps, overrideHookState } = getOverrideMethods();
-        const canEdit =
-          section === 'props' ? !!overrideProps : !!overrideHookState;
+        const canEdit = section === 'props' ? !!overrideProps : !!overrideHookState;
 
-        if (
-          valueElement &&
-          canEdit &&
-          (typeof value === 'string' ||
-            typeof value === 'number' ||
-            typeof value === 'boolean')
-        ) {
+        if (valueElement && canEdit && isEditableValue(value)) {
           valueElement.classList.add('react-scan-editable');
           valueElement.addEventListener('click', (e) => {
             e.stopPropagation();
 
-            const input = createScanInput();
-            input.value = value.toString();
+            const input = templates.input();
+            input.value = typeof value === 'string' ?
+              value.replace(/^"(?:.*)"$/, '$1')
+                .replace(/&quot;/g, '"')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&')
+                .replace(/&#39;/g, "'")
+              : value.toString();
 
+            let isReplacing = false;
             const updateValue = () => {
-              const newValue = input.value;
-              value = typeof value === 'number' ? Number(newValue) : newValue;
-              (valueElement as HTMLElement).dataset.text =
-                getValuePreview(value);
+              if (isReplacing) return;
+              isReplacing = true;
 
-              tryOrElse(() => {
-                input.replaceWith(valueElement);
-              }, null);
+              try {
+                const newValue = input.value;
+                const convertedValue =
+                  typeof value === 'number' ? Number(newValue) :
+                    typeof value === 'boolean' ? newValue === 'true' :
+                      newValue;
 
-              tryOrElse(() => {
-                const { overrideProps, overrideHookState } =
-                  getOverrideMethods();
-                if (overrideProps && section === 'props') {
-                  overrideProps(fiber, [key], value);
+                value = convertedValue;
+
+                // First apply the state/prop update
+                tryOrElse(() => {
+                  if (section === 'props' && overrideProps) {
+                    if (parentPath) {
+                      const parts = parentPath.split('.');
+                      // Get only the actual prop path parts (after 'props')
+                      const path = parts.filter(part => part !== 'props' && part !== componentName);
+                      path.push(key);
+                      overrideProps(fiber, path, convertedValue);
+                    } else {
+                      overrideProps(fiber, [key], convertedValue);
+                    }
+                  } else if (section === 'state' && overrideHookState) {
+                    // For class components
+                    if (fiber.stateNode && typeof fiber.stateNode.setState === 'function') {
+                      const path = parentPath ?
+                        parentPath.split('.').filter(part => part !== 'state' && part !== componentName)
+                        : [];
+                      path.push(key);
+                      overrideHookState(fiber, fiber.memoizedState.queue.id, path, convertedValue);
+                    } else {
+                      // For function components with hooks
+                      let currentHook = fiber.memoizedState;
+                      let hookIndex = 0;
+                      const stateNames = getStateNames(fiber);
+
+                      // Find the correct hook by matching state name
+                      while (currentHook) {
+                        const stateName = stateNames[hookIndex] ?? `state${hookIndex}`;
+
+                        if (currentHook.queue) {
+                          // Check if this hook contains our target state
+                          let path: Array<string> = [];
+                          if (parentPath) {
+                            path = parentPath
+                              .split('.')
+                              .filter(part => part !== 'state' && part !== componentName);
+                          }
+
+                          // If this is the hook we're looking for
+                          if ((path.length === 0 && stateName === key) ||
+                            (path.length > 0 && path[0] === stateName)) {
+
+                            // Remove the hook name from the path if it exists
+                            if (path.length > 0 && path[0] === stateName) {
+                              path.shift();
+                            }
+
+                            // Add the current key if we're editing a nested property
+                            if (path.length > 0 || parentPath) {
+                              path.push(key);
+                            }
+
+                            overrideHookState(
+                              fiber,
+                              currentHook.queue.id,
+                              path,
+                              convertedValue
+                            );
+                            break;
+                          }
+                        }
+
+                        currentHook = currentHook.next;
+                        hookIndex++;
+                      }
+                    }
+                  }
+                }, null);
+
+                // Then update UI in next frame
+                setTimeout(() => {
+                  valueElement.textContent = getValuePreview(value);
+                  if (input.parentNode) {
+                    input.replaceWith(valueElement);
+                  }
+                }, 0);
+
+              } catch (error) {
+                if (input.parentNode) {
+                  input.replaceWith(valueElement);
                 }
-                if (overrideHookState && section === 'state') {
-                  overrideHookState(fiber, key, [], value);
-                }
-              }, null);
+              } finally {
+                isReplacing = false;
+              }
             };
 
             input.addEventListener('blur', updateValue);
             input.addEventListener('keydown', (event) => {
               if (event.key === 'Enter') {
+                event.preventDefault();
                 updateValue();
+              } else if (event.key === 'Escape') {
+                isReplacing = true;
+                if (input.parentNode) {
+                  input.replaceWith(valueElement);
+                }
               }
             });
 
@@ -636,7 +803,7 @@ export const createPropertyElement = (
       changedAt.set(currentPath, Date.now());
     }
     if (changedAt.has(currentPath)) {
-      const flashOverlay = createScanFlashOverlay();
+      const flashOverlay = templates.flashOverlay();
       container.appendChild(flashOverlay);
 
       flashOverlay.style.opacity = '.9';
@@ -657,16 +824,14 @@ export const createPropertyElement = (
 
     return container;
   } catch {
-    /*We likely read a proxy/getter that threw an error */
     return null;
   }
 };
 
 const createCircularReferenceElement = (key: string) => {
-  const container = createScanPropertyContainer();
+  const container = templates.propertyContainer();
 
-  const preview = createScanPreviewLine();
-  // TODO(Alexis): perhaps appendChild
+  const preview = templates.previewLine();
   preview.innerHTML = `
     <span class="react-scan-key">${key}:&nbsp;</span><span class="react-scan-circular">[Circular Reference]</span>
   `;
@@ -699,7 +864,27 @@ export const getValuePreview = (value: any) => {
   if (value === undefined) return 'undefined';
   switch (typeof value) {
     case 'string':
-      return `&quot;${value}&quot;`;
+      // Check if the string is already escaped
+      if (value.includes('&quot;') || value.includes('&#39;') ||
+        value.includes('&lt;') || value.includes('&gt;') ||
+        value.includes('&amp;')) {
+        return `"${value}"`;
+      }
+      // If not escaped, do the escaping
+      return `"${value.replace(/[<>&"'\\\n\r\t]/g, (char) => {
+        switch (char) {
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '&': return '&amp;';
+          case '"': return '&quot;';
+          case "'": return '&#39;';
+          case '\\': return '\\\\';
+          case '\n': return '\\n';
+          case '\r': return '\\r';
+          case '\t': return '\\t';
+          default: return char;
+        }
+      })}"`;
     case 'number':
       return value.toString();
     case 'boolean':
@@ -716,43 +901,5 @@ export const getValuePreview = (value: any) => {
     }
     default:
       return typeof value;
-  }
-};
-
-export const replayComponent = async (fiber: any) => {
-  try {
-    const { overrideProps, overrideHookState } = getOverrideMethods();
-    if (!overrideProps || !overrideHookState || !fiber) return;
-
-    const currentProps = fiber.memoizedProps || {};
-
-    try {
-      for (const key in currentProps) {
-        overrideProps(fiber, [key], currentProps[key]);
-      }
-    } catch (e) {
-      /**/
-    }
-
-    try {
-      const state = getStateFromFiber(fiber) || {};
-      for (const key in state) {
-        overrideHookState(fiber, key, [], state[key]);
-      }
-    } catch (e) {
-      /**/
-    }
-
-    try {
-      let child = fiber.child;
-      while (child) {
-        await replayComponent(child);
-        child = child.sibling;
-      }
-    } catch (e) {
-      /**/
-    }
-  } catch (e) {
-    /**/
   }
 };
