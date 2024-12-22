@@ -428,6 +428,11 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
       cumulativeChanges.props.clear();
       cumulativeChanges.state.clear();
       cumulativeChanges.context.clear();
+    } else if (state.kind === 'focused') {
+      // Always reset counters when focusing a new element
+      cumulativeChanges.props.clear();
+      cumulativeChanges.state.clear();
+      cumulativeChanges.context.clear();
     }
   });
 

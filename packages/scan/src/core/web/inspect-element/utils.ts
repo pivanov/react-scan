@@ -227,34 +227,39 @@ export const getStateFromFiber = (fiber: Fiber | null): ComponentState => {
 export const getChangedState = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
 
-  // For function components with hooks
   if (fiber.tag === FunctionComponentTag ||
     fiber.tag === SimpleMemoComponentTag ||
     fiber.tag === MemoComponentTag) {
+    if (!fiber.memoizedState) return changes;
+
     let memoizedState = fiber.memoizedState as MemoizedState | null;
     let previousState = fiber.alternate?.memoizedState as MemoizedState | null;
     let index = 0;
 
     const stateNames = getStateNames(fiber);
 
-    while (memoizedState && previousState) {
+    while (memoizedState) {
+      if (!previousState) break;
+
       if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
-        const name = stateNames[index] ?? `state${index}`;
+        const name = stateNames[index] ?? `state_${index}`;
         if (!Object.is(memoizedState.memoizedState, previousState.memoizedState)) {
           changes.add(name);
         }
+        index++;
       }
       memoizedState = memoizedState.next;
       previousState = previousState.next;
-      index++;
     }
-  }
-  // For class components
-  else if (fiber.tag === ClassComponentTag) {
+  } else if (fiber.tag === ClassComponentTag) {
+    if (!fiber.memoizedState) return changes;
+
     const currentState = fiber.memoizedState || {};
     const previousState = fiber.alternate?.memoizedState || {};
 
-    for (const key in currentState) {
+    const keys = Object.keys(currentState);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
       if (!Object.is(currentState[key], previousState[key])) {
         changes.add(key);
       }
