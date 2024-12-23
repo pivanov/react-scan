@@ -21,10 +21,79 @@ interface OverrideMethods {
     | null;
 }
 
-const rectCache = new LRUMap<Element, { rect: DOMRect; timestamp: number }>(100);
-const RECT_CACHE_TTL = 100; // 100ms TTL
+interface CacheEntry {
+  rect: DOMRect;
+  timestamp: number;
+}
+
+interface ReactRootContainer {
+  _reactRootContainer?: {
+    _internalRoot?: {
+      current?: {
+        child: Fiber;
+      };
+    };
+  };
+}
+
+interface ReactInternalProps {
+  [key: string]: Fiber;
+}
+
+interface ReactRenderer {
+  bundleType: number;
+  rendererPackageName?: string;
+  overrideProps?: (fiber: Fiber, path: Array<string>, value: any) => void;
+  overrideHookState?: (fiber: Fiber, id: string, path: Array<any>, value: any) => void;
+}
+
+const RECT_CACHE_TTL = 100;
+const RECT_CACHE_SIZE = 100;
+const BATCH_SIZE = 10;
+
+let rectCleanupTimeout: TTimer | null = null;
+const rectCache = new LRUMap<Element, CacheEntry>(RECT_CACHE_SIZE);
+
+// Keep track of elements we need to check
+const elementsToCheck = new Set<Element>();
+
+const cleanupRectCache = () => {
+  if (rectCleanupTimeout) {
+    clearTimeout(rectCleanupTimeout);
+    rectCleanupTimeout = null;
+  }
+
+  const now = performance.now();
+  let cleanupCount = 0;
+
+  // Process only the elements we know about
+  for (const element of elementsToCheck) {
+    if (cleanupCount >= BATCH_SIZE) break;
+
+    const entry = rectCache.get(element);
+    if (!entry) {
+      elementsToCheck.delete(element);
+      continue;
+    }
+
+    if (now - entry.timestamp > RECT_CACHE_TTL) {
+      rectCache.delete(element);
+      elementsToCheck.delete(element);
+      cleanupCount++;
+    }
+  }
+
+  // Schedule next cleanup only if we have elements to check
+  if (elementsToCheck.size > 0) {
+    rectCleanupTimeout = setTimeout(cleanupRectCache, RECT_CACHE_TTL);
+  }
+};
 
 const getCachedRect = (element: Element): DOMRect => {
+  if (!element || !(element instanceof Element)) {
+    return new DOMRect();
+  }
+
   const cached = rectCache.get(element);
   const now = performance.now();
 
@@ -32,16 +101,26 @@ const getCachedRect = (element: Element): DOMRect => {
     return cached.rect;
   }
 
-  const rect = element.getBoundingClientRect();
-  rectCache.set(element, { rect, timestamp: now });
-  return rect;
+  try {
+    const rect = element.getBoundingClientRect();
+    rectCache.set(element, { rect, timestamp: now });
+    elementsToCheck.add(element);
+
+    if (!rectCleanupTimeout) {
+      rectCleanupTimeout = setTimeout(cleanupRectCache, RECT_CACHE_TTL);
+    }
+
+    return rect;
+  } catch (error) {
+    return new DOMRect();
+  }
 };
 
 export const getFiberFromElement = (element: Element): Fiber | null => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
     const { renderers } = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (!renderers) return null;
-    for (const [_, renderer] of Array.from(renderers)) {
+    for (const [, renderer] of Array.from(renderers)) {
       try {
         // @ts-expect-error - renderer.findFiberByHostInstance is not typed
         const fiber = renderer.findFiberByHostInstance(element);
@@ -53,8 +132,9 @@ export const getFiberFromElement = (element: Element): Fiber | null => {
   }
 
   if ('_reactRootContainer' in element) {
-    // @ts-expect-error - Property '_reactRootContainer' does not exist on type 'HTMLElement'
-    return element._reactRootContainer?._internalRoot?.current?.child;
+    const elementWithRoot = element as unknown as ReactRootContainer;
+    const rootContainer = elementWithRoot._reactRootContainer;
+    return rootContainer?._internalRoot?.current?.child ?? null;
   }
 
   for (const key in element) {
@@ -62,7 +142,8 @@ export const getFiberFromElement = (element: Element): Fiber | null => {
       key.startsWith('__reactInternalInstance$') ||
       key.startsWith('__reactFiber')
     ) {
-      return element[key as keyof Element] as unknown as Fiber;
+      const elementWithFiber = element as unknown as ReactInternalProps;
+      return elementWithFiber[key];
     }
   }
   return null;
@@ -94,19 +175,18 @@ export const getFirstStateNode = (fiber: Fiber): Element | null => {
   return null;
 };
 
-export const getNearestFiberFromElement = (element: Element | null) => {
+export const getNearestFiberFromElement = (element: Element | null): Fiber | null => {
   if (!element) return null;
-  const target: Element | null = element;
-  const originalFiber = getFiberFromElement(target);
-  if (!originalFiber) {
-    return null;
-  }
-  const res = getParentCompositeFiber(originalFiber);
-  if (!res) {
-    return null;
-  }
 
-  return res[0];
+  try {
+    const fiber = getFiberFromElement(element);
+    if (!fiber) return null;
+
+    const res = getParentCompositeFiber(fiber);
+    return res ? res[0] : null;
+  } catch (error) {
+    return null;
+  }
 };
 
 export const getParentCompositeFiber = (fiber: Fiber) => {
@@ -213,29 +293,33 @@ interface ComponentState {
 export const getStateFromFiber = (fiber: Fiber | null): ComponentState => {
   if (!fiber) return {};
 
-  if (
-    fiber.tag === FunctionComponentTag ||
-    fiber.tag === ForwardRefTag ||
-    fiber.tag === SimpleMemoComponentTag ||
-    fiber.tag === MemoComponentTag
-  ) {
-    let memoizedState = fiber.memoizedState as MemoizedState | null;
-    const state: ComponentState = {};
-    const stateNames = getStateNames(fiber);
+  try {
+    if (
+      fiber.tag === FunctionComponentTag ||
+      fiber.tag === ForwardRefTag ||
+      fiber.tag === SimpleMemoComponentTag ||
+      fiber.tag === MemoComponentTag
+    ) {
+      let memoizedState = fiber.memoizedState as MemoizedState | null;
+      const state: ComponentState = {};
+      const stateNames = getStateNames(fiber);
 
-    let index = 0;
-    while (memoizedState) {
-      if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
-        const name = stateNames[index] ?? `state${index}`;
-        state[name] = memoizedState.memoizedState;
+      let index = 0;
+      while (memoizedState) {
+        if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
+          const name = stateNames[index] ?? `state${index}`;
+          state[name] = memoizedState.memoizedState;
+        }
+        memoizedState = memoizedState.next;
+        index++;
       }
-      memoizedState = memoizedState.next;
-      index++;
-    }
 
-    return state;
-  } else if (fiber.tag === ClassComponentTag) {
-    return fiber.memoizedState || {};
+      return state;
+    } else if (fiber.tag === ClassComponentTag) {
+      return fiber.memoizedState || {};
+    }
+  } catch {
+  /* Silently fail */
   }
 
   return {};
@@ -561,15 +645,13 @@ export const getOverrideMethods = (): OverrideMethods => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
     const { renderers } = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (renderers) {
-      // Get the react-dom renderer (bundleType: 1)
-      for (const [_, renderer] of Array.from(renderers)) {
+      for (const [, renderer] of Array.from(renderers)) {
         try {
-          // @ts-expect-error - bundleType is not typed
-          if (renderer.bundleType === 1 && renderer.rendererPackageName === 'react-dom') {
-          // @ts-expect-error - renderer methods are not typed
-            overrideProps = renderer.overrideProps;
-            // @ts-expect-error - renderer methods are not typed
-            overrideHookState = renderer.overrideHookState;
+          const typedRenderer = renderer as unknown as ReactRenderer;
+
+          if (typedRenderer.bundleType === 1 && typedRenderer.rendererPackageName === 'react-dom') {
+            overrideProps = typedRenderer.overrideProps ?? null;
+            overrideHookState = typedRenderer.overrideHookState ?? null;
             break;
           }
         } catch (e) {
@@ -580,4 +662,19 @@ export const getOverrideMethods = (): OverrideMethods => {
   }
 
   return { overrideProps, overrideHookState };
+};
+
+export const cleanup = () => {
+  if (rectCleanupTimeout) {
+    clearTimeout(rectCleanupTimeout);
+    rectCleanupTimeout = null;
+  }
+
+  // First delete all elements from cache
+  for (const element of elementsToCheck) {
+    rectCache.delete(element);
+  }
+
+  // Then clear the tracking set
+  elementsToCheck.clear();
 };
