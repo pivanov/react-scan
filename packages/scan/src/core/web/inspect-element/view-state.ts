@@ -15,6 +15,7 @@ import {
 
 const EXPANDED_PATHS = new Set<string>();
 const fadeOutTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+const activeOverlays = new Set<HTMLElement>();
 
 export const cumulativeChanges: ChangeTracker = {
   props: new Map<string, number>(),
@@ -413,7 +414,7 @@ export const replayComponent = async (fiber: any) => {
 export const changedAt = new Map<string, number>();
 const lastRendered = new Map<string, unknown>();
 
-let changedAtInterval: ReturnType<typeof setInterval>;
+let changedAtInterval: ReturnType<typeof setInterval> | null = null;
 
 const tryOrElse = <T, E>(cb: () => T, val: E) => {
   try {
@@ -943,19 +944,27 @@ export const cleanup = () => {
   // Clear all expanded paths
   EXPANDED_PATHS.clear();
 
-  // Clear all fade out timers - WeakMap doesn't have forEach, so we need to handle cleanup differently
-  document.querySelectorAll('.react-scan-flash-overlay').forEach(overlay => {
-    if (overlay instanceof HTMLElement) {
-      const timerId = fadeOutTimers.get(overlay);
-      if (timerId !== undefined) {
-        clearTimeout(timerId);
-        fadeOutTimers.delete(overlay);
-      }
-      if (overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
-      }
-    }
-  });
+  // Clean up all active overlays
+  activeOverlays.forEach(cleanupFlashOverlay);
+  activeOverlays.clear();
+
+  // Clear interval if it exists
+  if (changedAtInterval !== null) {
+    clearInterval(changedAtInterval);
+    changedAtInterval = null;
+  }
+};
+
+const cleanupFlashOverlay = (overlay: HTMLElement) => {
+  const timerId = fadeOutTimers.get(overlay);
+  if (timerId !== undefined) {
+    clearTimeout(timerId);
+    fadeOutTimers.delete(overlay);
+  }
+  activeOverlays.delete(overlay);
+  if (overlay.parentNode) {
+    overlay.parentNode.removeChild(overlay);
+  }
 };
 
 const createAndHandleFlashOverlay = (container: HTMLElement) => {
@@ -967,6 +976,7 @@ const createAndHandleFlashOverlay = (container: HTMLElement) => {
 
   if (!existingOverlay) {
     container.appendChild(flashOverlay);
+    activeOverlays.add(flashOverlay);
   }
 
   // Reset the overlay state
@@ -983,11 +993,7 @@ const createAndHandleFlashOverlay = (container: HTMLElement) => {
 
     // Set new timer
     const timerId = setTimeout(() => {
-      if (flashOverlay && flashOverlay.parentNode) {
-        flashOverlay.style.transition = 'opacity 400ms ease-out';
-        flashOverlay.style.opacity = '0';
-      }
-      fadeOutTimers.delete(flashOverlay);
+      cleanupFlashOverlay(flashOverlay);
     }, 300);
 
     fadeOutTimers.set(flashOverlay, timerId);
