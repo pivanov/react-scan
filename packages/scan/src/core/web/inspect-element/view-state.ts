@@ -649,11 +649,6 @@ export const createPropertyElement = (
 
                 value = convertedValue;
 
-                // Reset render count for this component
-                Store.reportData.delete(fiber);
-                if (fiber.alternate) {
-                  Store.reportData.delete(fiber.alternate);
-                }
                 // First apply the state/prop update
                 tryOrElse(() => {
                   if (section === 'props' && overrideProps) {
@@ -663,65 +658,47 @@ export const createPropertyElement = (
                       const path = parts.filter(part => part !== 'props' && part !== componentName);
                       path.push(key);
                       overrideProps(fiber, path, convertedValue);
-
                     } else {
                       overrideProps(fiber, [key], convertedValue);
                     }
                   } else if (section === 'state' && overrideHookState) {
-                    // For class components
-                    if (fiber.stateNode && typeof fiber.stateNode.setState === 'function') {
-                      const path = parentPath ?
-                        parentPath.split('.').filter(part => part !== 'state' && part !== componentName)
-                        : [];
-                      path.push(key);
-                      overrideHookState(fiber, fiber.memoizedState.queue.id, path, convertedValue);
-                    } else {
-                      // For function components with hooks
-                      let currentHook = fiber.memoizedState;
-                      let hookIndex = 0;
+                    // Handle primitive state values (no path) differently
+                    if (!parentPath) {
+                    // Get the hook ID for this state key
                       const stateNames = getStateNames(fiber);
+                      const namedStateIndex = stateNames.indexOf(key);
+                      const hookId = namedStateIndex !== -1 ?
+                        namedStateIndex.toString() :
+                        '0'; // Default to first hook if not found
 
-                      // Find the correct hook by matching state name
-                      while (currentHook) {
-                        const stateName = stateNames[hookIndex] ?? `state${hookIndex}`;
-
-                        if (currentHook.queue) {
-                          // Check if this hook contains our target state
-                          let path: Array<string> = [];
-                          if (parentPath) {
-                            path = parentPath
-                              .split('.')
-                              .filter(part => part !== 'state' && part !== componentName);
-                          }
-
-                          // If this is the hook we're looking for
-                          if ((path.length === 0 && stateName === key) ||
-                            (path.length > 0 && path[0] === stateName)) {
-
-                            // Remove the hook name from the path if it exists
-                            if (path.length > 0 && path[0] === stateName) {
-                              path.shift();
-                            }
-
-                            // Add the current key if we're editing a nested property
-                            if (path.length > 0 || parentPath) {
-                              path.push(key);
-                            }
-
-                            overrideHookState(
-                              fiber,
-                              currentHook.queue.id,
-                              path,
-                              convertedValue
-                            );
-                            break;
-                          }
-                        }
-
-                        currentHook = currentHook.next;
-                        hookIndex++;
-                      }
+                      // Update the primitive state value directly
+                      overrideHookState(fiber, hookId, [], convertedValue);
+                      return;
                     }
+
+                    // For nested state updates, continue with the existing logic
+                    const fullPathParts = parentPath.split('.');
+                    const stateIndex = fullPathParts.indexOf('state');
+                    if (stateIndex === -1) {
+                      return;
+                    }
+
+                    // Rest of the existing nested state update logic...
+                    const statePath = fullPathParts.slice(stateIndex + 1);
+                    const baseStateKey = statePath[0];
+
+                    const stateNames = getStateNames(fiber);
+                    const namedStateIndex = stateNames.indexOf(baseStateKey);
+                    const hookId = namedStateIndex !== -1 ?
+                      namedStateIndex.toString() :
+                      '0';
+
+                    const nestedPath = statePath.slice(1).map(part => {
+                      return /^\d+$/.test(part) ? parseInt(part, 10) : part;
+                    });
+                    nestedPath.push(key);
+
+                    overrideHookState(fiber, hookId, nestedPath, convertedValue);
                   }
                 }, null);
 
