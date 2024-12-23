@@ -9,6 +9,7 @@ import {
   traverseFiber,
 } from 'bippy';
 import { type Fiber } from 'react-reconciler';
+import { LRUMap } from '@web-utils/lru';
 import { ReactScanInternals, Store } from '../../index';
 
 interface OverrideMethods {
@@ -19,6 +20,22 @@ interface OverrideMethods {
     | ((fiber: Fiber, id: string, path: Array<any>, value: any) => void)
     | null;
 }
+
+const rectCache = new LRUMap<Element, { rect: DOMRect; timestamp: number }>(100);
+const RECT_CACHE_TTL = 100; // 100ms TTL
+
+const getCachedRect = (element: Element): DOMRect => {
+  const cached = rectCache.get(element);
+  const now = performance.now();
+
+  if (cached && (now - cached.timestamp) < RECT_CACHE_TTL) {
+    return cached.rect;
+  }
+
+  const rect = element.getBoundingClientRect();
+  rectCache.set(element, { rect, timestamp: now });
+  return rect;
+};
 
 export const getFiberFromElement = (element: Element): Fiber | null => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
@@ -244,17 +261,6 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
         const currentValue = memoizedState.memoizedState;
         const prevValue = previousState.memoizedState;
 
-        // eslint-disable-next-line no-console
-        console.log(`State Check [${name}]:`, {
-          currentValue,
-          prevValue,
-          isArray: Array.isArray(currentValue),
-          currentLength: Array.isArray(currentValue) ? currentValue.length : null,
-          prevLength: Array.isArray(prevValue) ? prevValue.length : null,
-          isSameReference: currentValue === prevValue,
-          isObjectIs: Object.is(currentValue, prevValue)
-        });
-
         // Only add to changes if values are actually different
         if (!Object.is(currentValue, prevValue)) {
           changes.add(name);
@@ -323,7 +329,7 @@ export const getCompositeComponentFromElement = (element: Element) => {
     : (associatedFiber.alternate ?? associatedFiber);
   const stateNode = getFirstStateNode(currentAssociatedFiber);
   if (!stateNode) return {};
-  const targetRect = stateNode.getBoundingClientRect(); // causes reflow, be careful
+  const targetRect = getCachedRect(stateNode);
   if (!targetRect) return {};
   const anotherRes = getParentCompositeFiber(currentAssociatedFiber);
   if (!anotherRes) {

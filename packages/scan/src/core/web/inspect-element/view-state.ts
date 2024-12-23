@@ -851,23 +851,7 @@ export const createPropertyElement = (
       changedAt.set(currentPath, Date.now());
     }
     if (changedAt.has(currentPath)) {
-      const flashOverlay = templates.flashOverlay();
-      container.appendChild(flashOverlay);
-
-      flashOverlay.style.opacity = '.9';
-
-      const existingTimer = fadeOutTimers.get(flashOverlay);
-      if (existingTimer !== undefined) {
-        clearTimeout(existingTimer);
-      }
-
-      const timerId = setTimeout(() => {
-        flashOverlay.style.transition = 'opacity 400ms ease-out';
-        flashOverlay.style.opacity = '0';
-        fadeOutTimers.delete(flashOverlay);
-      }, 300);
-
-      fadeOutTimers.set(flashOverlay, timerId);
+      createAndHandleFlashOverlay(container);
     }
 
     return container;
@@ -949,5 +933,63 @@ export const getValuePreview = (value: unknown): string => {
     }
     default:
       return typeof value;
+  }
+};
+
+export type CleanupFunction = () => void;
+export type PositionCallback = (element: HTMLElement) => void;
+
+export const cleanup = () => {
+  // Clear all expanded paths
+  EXPANDED_PATHS.clear();
+
+  // Clear all fade out timers - WeakMap doesn't have forEach, so we need to handle cleanup differently
+  document.querySelectorAll('.react-scan-flash-overlay').forEach(overlay => {
+    if (overlay instanceof HTMLElement) {
+      const timerId = fadeOutTimers.get(overlay);
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+        fadeOutTimers.delete(overlay);
+      }
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    }
+  });
+};
+
+const createAndHandleFlashOverlay = (container: HTMLElement) => {
+  // Try to reuse existing flash overlay
+  const existingOverlay = container.querySelector('.react-scan-flash-overlay');
+  const flashOverlay = existingOverlay instanceof HTMLElement
+    ? existingOverlay
+    : templates.flashOverlay();
+
+  if (!existingOverlay) {
+    container.appendChild(flashOverlay);
+  }
+
+  // Reset the overlay state
+  if (flashOverlay instanceof HTMLElement) {
+    flashOverlay.style.transition = 'none';
+    flashOverlay.style.opacity = '.9';
+
+    // Clear any existing timer for this element
+    const existingTimer = fadeOutTimers.get(flashOverlay);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+      fadeOutTimers.delete(flashOverlay);
+    }
+
+    // Set new timer
+    const timerId = setTimeout(() => {
+      if (flashOverlay && flashOverlay.parentNode) {
+        flashOverlay.style.transition = 'opacity 400ms ease-out';
+        flashOverlay.style.opacity = '0';
+      }
+      fadeOutTimers.delete(flashOverlay);
+    }, 300);
+
+    fadeOutTimers.set(flashOverlay, timerId);
   }
 };
