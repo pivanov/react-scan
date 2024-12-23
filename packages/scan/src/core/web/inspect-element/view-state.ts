@@ -2,26 +2,21 @@ import type { Fiber } from 'react-reconciler';
 import { createHTMLTemplate } from '@web-utils/html-template';
 import { Store } from 'src/core';
 import { fastSerialize } from '../../instrumentation';
-import { type ChangeTracker } from './types';
 import {
   getChangedProps,
   getChangedState,
   getChangedContext,
   getStateFromFiber,
   getOverrideMethods,
-  getAllFiberContexts,
   getStateNames,
+  getCurrentContext,
+  getCurrentProps,
+  getCurrentState,
 } from './utils';
 
 const EXPANDED_PATHS = new Set<string>();
 const fadeOutTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 const activeOverlays = new Set<HTMLElement>();
-
-export const cumulativeChanges: ChangeTracker = {
-  props: new Map<string, number>(),
-  state: new Map<string, number>(),
-  context: new Map<string, number>(),
-};
 
 const templates = {
   whatChangedSection: createHTMLTemplate<HTMLDetailsElement>(
@@ -112,20 +107,23 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
   const componentName = fiber.type?.displayName || fiber.type?.name || 'Unknown';
 
-  // Reset tracking in two cases:
-  // 1. Different component type
-  // 2. Same type but different fiber instance (component re-mounted)
-  if (lastInspectedFiber?.type !== fiber.type || lastInspectedFiber !== fiber) {
-    if (lastInspectedFiber) {
-      Store.reportData.delete(lastInspectedFiber);
-      Store.reportData.delete(fiber);
-      if (fiber.alternate) {
-        Store.reportData.delete(fiber.alternate);
+  // Reset tracking only if:
+  // 1. Different component type AND
+  // 2. Not a parent-child relationship
+  if (lastInspectedFiber?.type !== fiber.type) {
+    const isParentChild = isParentChildRelationship(lastInspectedFiber, fiber);
+    if (!isParentChild) {
+      if (lastInspectedFiber) {
+        Store.reportData.delete(lastInspectedFiber);
+        Store.reportData.delete(fiber);
+        if (fiber.alternate) {
+          Store.reportData.delete(fiber.alternate);
+        }
       }
+      // Clear all tracking
+      stateChanges.counts.clear();
+      stateChanges.lastValues.clear();
     }
-    // Clear all tracking
-    stateChanges.counts.clear();
-    stateChanges.lastValues.clear();
   }
   lastInspectedFiber = fiber;
 
@@ -133,54 +131,14 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const reportData = Store.reportData.get(fiber);
   const renderCount = reportData?.count ?? 0;
 
-  // Get current changes
+  // Get current changes for yellow box
   const changedProps = new Set(getChangedProps(fiber));
   const changedState = new Set(getChangedState(fiber));
   const changedContext = new Set(getChangedContext(fiber));
 
-  // Track state changes
-  changedState.forEach(key => {
-    // Find the correct hook state value
-    let memoizedState = fiber.memoizedState;
-    let index = 0;
-    const stateNames = getStateNames(fiber);
-
-    while (memoizedState) {
-      if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
-        const name = stateNames[index] ?? `state${index}`;
-        if (name === key) {
-          const currentValue = memoizedState.memoizedState;
-          const lastValue = stateChanges.lastValues.get(key);
-
-          // Check if value actually changed
-          const hasChanged = !Object.is(currentValue, lastValue);
-
-          // For arrays, check if length changed
-          const isArrayLengthChange = Array.isArray(currentValue) &&
-            (!Array.isArray(lastValue) || currentValue.length !== lastValue.length);
-
-          // For input, check if value changed
-          const isInputChange = name === 'input' && hasChanged;
-
-          // Increment count if array length changed or input changed
-          if (isArrayLengthChange || isInputChange) {
-            const count = stateChanges.counts.get(key) ?? 0;
-            stateChanges.counts.set(key, count + 1);
-          }
-
-          // Always update last value
-          stateChanges.lastValues.set(key, currentValue);
-          break;
-        }
-        index++;
-      }
-      memoizedState = memoizedState.next;
-    }
-  });
-
   propContainer.innerHTML = '';
 
-  // Create what changed section using template
+  // Create what changed section (yellow box)
   const whatChangedSection = templates.whatChangedSection();
   whatChangedSection.open = Store.wasDetailsOpen.value;
 
@@ -192,20 +150,16 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     stateHeader.textContent = 'State:';
     const stateList = templates.changeList();
 
-    let hasVisibleStateChanges = false;  // Track if we have any non-zero changes
     changedState.forEach(key => {
-      const count = stateChanges.counts.get(key) ?? 0;
-      if (count > 0) {  // Only show if count > 0
-        hasVisibleStateChanges = true;
+      if (renderCount > 0) {
         hasAnyChanges = true;
         const li = templates.listItem();
-        li.textContent = `${key} ×${count}`;
+        li.textContent = `${key} ×${renderCount}`;
         stateList.appendChild(li);
       }
     });
 
-    // Only append state section if we have visible changes
-    if (hasVisibleStateChanges) {
+    if (hasAnyChanges) {
       whatChangedSection.appendChild(stateHeader);
       whatChangedSection.appendChild(stateList);
     }
@@ -217,10 +171,9 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     propsHeader.textContent = 'Props:';
     const propsList = templates.changeList();
 
-    let hasVisibleProps = false;
     changedProps.forEach(key => {
-      if (renderCount > 0) {  // Only show if there are actual renders
-        hasVisibleProps = true;
+      // Only show props that actually changed (not 0)
+      if (renderCount > 0) {
         hasAnyChanges = true;
         const li = templates.listItem();
         li.textContent = `${key} ×${renderCount}`;
@@ -228,7 +181,7 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
       }
     });
 
-    if (hasVisibleProps) {  // Only append if we have visible changes
+    if (hasAnyChanges) {
       whatChangedSection.appendChild(propsHeader);
       whatChangedSection.appendChild(propsList);
     }
@@ -240,21 +193,15 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     contextHeader.textContent = 'Context:';
     const contextList = templates.changeList();
 
-    let hasVisibleContext = false;
     changedContext.forEach(key => {
-      if (renderCount > 0) {  // Only show if there are actual renders
-        hasVisibleContext = true;
-        hasAnyChanges = true;
-        const li = templates.listItem();
-        li.textContent = `${key.replace('context.', '')} ×${renderCount}`;
-        contextList.appendChild(li);
-      }
+      hasAnyChanges = true;
+      const li = templates.listItem();
+      li.textContent = `${key.replace('context.', '')} ×${renderCount}`;
+      contextList.appendChild(li);
     });
 
-    if (hasVisibleContext) {  // Only append if we have visible changes
-      whatChangedSection.appendChild(contextHeader);
-      whatChangedSection.appendChild(contextList);
-    }
+    whatChangedSection.appendChild(contextHeader);
+    whatChangedSection.appendChild(contextList);
   }
 
   // Add back the toggle listener
@@ -270,11 +217,11 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   // Create inspector section
   const inspector = templates.inspector();
   const content = templates.content();
-
   const sections: Array<{ element: HTMLElement; hasChanges: boolean }> = [];
 
-  // Props section
-  if (Object.values(fiber.memoizedProps || {}).length) {
+  // Props section - use getCurrentProps
+  const currentProps = getCurrentProps(fiber);
+  if (Object.values(currentProps).length) {
     tryOrElse(() => {
       sections.push({
         element: renderSection(
@@ -283,44 +230,18 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
           fiber,
           propContainer,
           'Props',
-          fiber.memoizedProps || {},
+          currentProps,
           changedProps,
-          changedContext,
         ),
         hasChanges: changedProps.size > 0,
       });
     }, null);
   }
 
-  // Context section
-  if (Array.from(getAllFiberContexts(fiber).entries()).length) {
+  // Context section - use getCurrentContext
+  const currentContext = getCurrentContext(fiber);
+  if (Object.keys(currentContext).length) {
     tryOrElse(() => {
-      const contextObj: Record<string, any> = {};
-
-      Array.from(getAllFiberContexts(fiber).entries()).forEach(([contextType, value]) => {
-        const contextKey = (typeof contextType === 'object' && contextType !== null)
-          ? (contextType as any)?.displayName ??
-          (contextType as any)?.Provider?.displayName ??
-          (contextType as any)?.Consumer?.displayName ??
-          'UnnamedContext'
-          : contextType;
-
-        const processValue = (val: any): any => {
-          if (typeof val === 'function') {
-            return '[Function]';
-          }
-          if (typeof val === 'object' && val !== null) {
-            return Object.entries(val).reduce((acc, [k, v]) => ({
-              ...acc,
-              [k]: processValue(v)
-            }), {});
-          }
-          return val;
-        };
-
-        contextObj[contextKey] = processValue(value.displayValue);
-      });
-
       sections.push({
         element: renderSection(
           componentName,
@@ -328,7 +249,7 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
           fiber,
           propContainer,
           'Context',
-          contextObj,
+          currentContext,
           changedContext,
         ),
         hasChanges: changedContext.size > 0,
@@ -336,22 +257,16 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     }, null);
   }
 
-  // State section
-  const currentState = getStateFromFiber(fiber);
-  if (currentState && Object.values(currentState).length > 0) {
+  // State section - use getCurrentState
+  const currentState = getCurrentState(fiber);
+  if (Object.values(currentState).length > 0) {
     tryOrElse(() => {
-      const stateObj = Array.isArray(currentState)
-        ? Object.fromEntries(currentState.map((val: unknown, idx: number) => [idx.toString(), val]))
+      // Ensure state is treated as a record
+      const stateObj: Record<string, unknown> = Array.isArray(currentState)
+        ? Object.fromEntries(
+          (currentState as Array<unknown>).map((val, idx) => [idx.toString(), val])
+        )
         : currentState;
-
-      for (const [key, value] of Object.entries(stateObj)) {
-        const path = `${componentName}.state.${key}`;
-        const lastValue = lastRendered.get(path);
-        if (lastValue !== undefined && lastValue !== value) {
-          changedAt.set(path, Date.now());
-        }
-        lastRendered.set(path, value);
-      }
 
       sections.push({
         element: renderSection(
@@ -998,4 +913,25 @@ const createAndHandleFlashOverlay = (container: HTMLElement) => {
 
     fadeOutTimers.set(flashOverlay, timerId);
   }
+};
+
+// Helper to check if fibers are in a parent-child relationship
+const isParentChildRelationship = (fiberA: Fiber | null, fiberB: Fiber | null): boolean => {
+  if (!fiberA || !fiberB) return false;
+
+  // Check if A is parent of B
+  let current = fiberB;
+  while (current.return) {
+    if (current.return === fiberA) return true;
+    current = current.return;
+  }
+
+  // Check if B is parent of A
+  current = fiberA;
+  while (current.return) {
+    if (current.return === fiberB) return true;
+    current = current.return;
+  }
+
+  return false;
 };

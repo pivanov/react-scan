@@ -15,13 +15,6 @@ export interface ComponentData {
   context: Map<any, FiberContextValue>;
 }
 
-// Change tracking types
-export interface ChangeTracker {
-  props: Map<string, number>;
-  state: Map<string, number>;
-  context: Map<string, number>;
-}
-
 // Section types
 export interface SectionData {
   element: HTMLElement;

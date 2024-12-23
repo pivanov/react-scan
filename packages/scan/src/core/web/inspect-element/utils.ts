@@ -5,10 +5,10 @@ import {
   ForwardRefTag,
   SimpleMemoComponentTag,
   MemoComponentTag,
-  ClassComponentTag,
   traverseFiber,
 } from 'bippy';
 import { type Fiber } from 'react-reconciler';
+import { type ComponentState } from 'react';
 import { LRUMap } from '@web-utils/lru';
 import { ReactScanInternals, Store } from '../../index';
 
@@ -234,39 +234,18 @@ export const getChangedPropsDetailed = (fiber: Fiber): Array<PropChange> => {
 };
 
 export const getChangedProps = (fiber: Fiber): Set<string> => {
-  const currentProps = fiber.memoizedProps || {};
-  const previousProps = fiber.alternate?.memoizedProps || {};
   const changes = new Set<string>();
+  if (!fiber.alternate) return changes;
 
-  // First check current vs previous props
+  const previousProps = fiber.alternate.memoizedProps || {};
+  const currentProps = fiber.memoizedProps || {};
+
   for (const key in currentProps) {
     if (key === 'children') continue;
-
-    const currentValue = currentProps[key];
-    const prevValue = previousProps[key];
-
-    // Use strict equality for functions to detect new references
-    if (typeof currentValue === 'function' || typeof prevValue === 'function') {
-      if (currentValue !== prevValue) {
-        changes.add(key);
-      }
-      continue;
-    }
-
-    // For other values, use Object.is for proper NaN handling
-    if (!Object.is(currentValue, prevValue)) {
+    if (!Object.is(currentProps[key], previousProps[key])) {
       changes.add(key);
     }
   }
-
-  // Also check if any previous props were removed
-  for (const key in previousProps) {
-    if (key === 'children') continue;
-    if (!(key in currentProps)) {
-      changes.add(key);
-    }
-  }
-
   return changes;
 };
 
@@ -280,17 +259,7 @@ export const getStateNames = (fiber: Fiber): Array<string> => {
   ) : [];
 };
 
-interface MemoizedState {
-  memoizedState: unknown;
-  queue: unknown;
-  next: MemoizedState | null;
-}
-
-interface ComponentState {
-  [key: string]: unknown;
-}
-
-export const getStateFromFiber = (fiber: Fiber | null): ComponentState => {
+export const getStateFromFiber = (fiber: Fiber | null) => {
   if (!fiber) return {};
 
   try {
@@ -300,7 +269,7 @@ export const getStateFromFiber = (fiber: Fiber | null): ComponentState => {
       fiber.tag === SimpleMemoComponentTag ||
       fiber.tag === MemoComponentTag
     ) {
-      let memoizedState = fiber.memoizedState as MemoizedState | null;
+      let memoizedState = fiber.memoizedState;
       const state: ComponentState = {};
       const stateNames = getStateNames(fiber);
 
@@ -308,70 +277,69 @@ export const getStateFromFiber = (fiber: Fiber | null): ComponentState => {
       while (memoizedState) {
         if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
           const name = stateNames[index] ?? `state${index}`;
-          state[name] = memoizedState.memoizedState;
+
+          // Start with current state
+          let value = memoizedState.memoizedState;
+
+          // Apply any pending updates
+          if (memoizedState.queue.pending) {
+            const pending = memoizedState.queue.pending;
+            let update = pending.next;
+
+            // Process all updates in the circular queue
+            do {
+              if (update?.payload) {
+                value = typeof update.payload === 'function'
+                  ? update.payload(value)
+                  : update.payload;
+              }
+              update = update.next;
+            } while (update !== null && update !== pending.next);
+          }
+
+          state[name] = value;
         }
         memoizedState = memoizedState.next;
         index++;
       }
-
       return state;
-    } else if (fiber.tag === ClassComponentTag) {
-      return fiber.memoizedState || {};
     }
   } catch {
-  /* Silently fail */
+    /* Silently fail */
   }
-
   return {};
 };
 
 export const getChangedState = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
+  if (!fiber.alternate) return changes;
 
+  const previousFiber = fiber.alternate;
   if (fiber.tag === FunctionComponentTag ||
     fiber.tag === SimpleMemoComponentTag ||
     fiber.tag === MemoComponentTag) {
-    if (!fiber.memoizedState) return changes;
 
-    let memoizedState = fiber.memoizedState as MemoizedState | null;
-    let previousState = fiber.alternate?.memoizedState as MemoizedState | null;
+    let currentState = fiber.memoizedState;
+    let previousState = previousFiber.memoizedState;
     let index = 0;
-
     const stateNames = getStateNames(fiber);
 
-    while (memoizedState && previousState) {
-      if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
+    while (currentState && previousState) {
+      if (currentState.queue && currentState.memoizedState !== undefined) {
         const name = stateNames[index] ?? `state${index}`;
-        const currentValue = memoizedState.memoizedState;
-        const prevValue = previousState.memoizedState;
-
-        // Only add to changes if values are actually different
-        if (!Object.is(currentValue, prevValue)) {
+        const hasValueChange = !Object.is(
+          currentState.memoizedState,
+          previousState.memoizedState
+        );
+        if (hasValueChange) {
           changes.add(name);
         }
         index++;
       }
-      memoizedState = memoizedState.next;
+      currentState = currentState.next;
       previousState = previousState.next;
     }
-  } else if (fiber.tag === ClassComponentTag) {
-    if (!fiber.memoizedState) return changes;
-
-    const currentState = fiber.memoizedState;
-    const previousState = fiber.alternate?.memoizedState;
-
-    if (currentState && previousState) {
-      for (const key in currentState) {
-        const currentValue = currentState[key];
-        const prevValue = previousState[key];
-
-        if (!Object.is(currentValue, prevValue)) {
-          changes.add(key);
-        }
-      }
-    }
   }
-
   return changes;
 };
 
@@ -677,4 +645,76 @@ export const cleanup = () => {
 
   // Then clear the tracking set
   elementsToCheck.clear();
+};
+
+export const getCurrentProps = (fiber: Fiber) => {
+  return fiber.memoizedProps || {};
+};
+
+export const getCurrentState = (fiber: Fiber | null) => {
+  if (!fiber) return {};
+
+  try {
+    if (
+      fiber.tag === FunctionComponentTag ||
+      fiber.tag === ForwardRefTag ||
+      fiber.tag === SimpleMemoComponentTag ||
+      fiber.tag === MemoComponentTag
+    ) {
+      let memoizedState = fiber.memoizedState;
+      const state: ComponentState = {};
+      const stateNames = getStateNames(fiber);
+
+      let index = 0;
+      while (memoizedState) {
+        if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
+          const name = stateNames[index] ?? `state${index}`;
+
+          // Get the latest rendered state from the queue
+          let value = memoizedState.next?.queue?.lastRenderedState ?? memoizedState.memoizedState;
+
+          // If there are any pending updates, apply them
+          if (memoizedState.queue.pending) {
+            const pending = memoizedState.queue.pending;
+            const first = pending.next;
+            let update = first;
+
+            do {
+              if (update?.payload) {
+                value = typeof update.payload === 'function'
+                  ? update.payload(value)
+                  : update.payload;
+              }
+              update = update.next;
+            } while (update !== null && update !== first);
+          }
+
+          state[name] = value;
+        }
+        memoizedState = memoizedState.next;
+        index++;
+      }
+      return state;
+    }
+  } catch {
+    /* Silently fail */
+  }
+  return {};
+};
+
+export const getCurrentContext = (fiber: Fiber) => {
+  const contexts = getAllFiberContexts(fiber);
+  const contextObj: Record<string, any> = {};
+
+  contexts.forEach((value, contextType) => {
+    const contextKey = (typeof contextType === 'object' && contextType !== null)
+      ? (contextType as any)?.displayName ??
+      (contextType as any)?.Provider?.displayName ??
+      (contextType as any)?.Consumer?.displayName ??
+      'UnnamedContext'
+      : contextType;
+    contextObj[contextKey] = value.displayValue;
+  });
+
+  return contextObj;
 };

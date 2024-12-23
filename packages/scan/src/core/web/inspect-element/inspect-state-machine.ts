@@ -8,7 +8,7 @@ import {
   updateCanvasSize,
 } from './overlay';
 import { getCompositeComponentFromElement } from './utils';
-import { cumulativeChanges, renderPropsAndState } from './view-state';
+import { renderPropsAndState } from './view-state';
 
 export type States =
   | {
@@ -419,20 +419,6 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
         const didRender = didFiberRender(parentCompositeFiber);
         renderPropsAndState(didRender, parentCompositeFiber);
       }
-    }
-  });
-
-  Store.inspectState.subscribe((state) => {
-    if (state.kind === 'inspect-off') {
-      // Clear counters when inspection is turned off
-      cumulativeChanges.props.clear();
-      cumulativeChanges.state.clear();
-      cumulativeChanges.context.clear();
-    } else if (state.kind === 'focused') {
-      // Always reset counters when focusing a new element
-      cumulativeChanges.props.clear();
-      cumulativeChanges.state.clear();
-      cumulativeChanges.context.clear();
     }
   });
 
