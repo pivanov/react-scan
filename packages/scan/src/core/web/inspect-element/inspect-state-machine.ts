@@ -222,6 +222,13 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
 
             drawHoverOverlay(el as HTMLElement, canvas, ctx, 'locked');
 
+            // Get initial props and state
+            const { parentCompositeFiber } = getCompositeComponentFromElement(el as HTMLElement);
+            if (parentCompositeFiber) {
+              const didRender = didFiberRender(parentCompositeFiber);
+              renderPropsAndState(didRender, parentCompositeFiber);
+            }
+
             Store.inspectState.value = {
               kind: 'focused',
               focusedDomElement: el as HTMLElement,
@@ -273,7 +280,7 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
           };
         }
         case 'focused': {
-          unsubscribeAll(); // potential optimization: only unSub if inspectStateKind transitioned
+          unsubscribeAll();
           recursiveRaf(() => {
             drawHoverOverlay(
               inspectState.focusedDomElement,
@@ -284,7 +291,6 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
           });
           if (!document.contains(inspectState.focusedDomElement)) {
             setTimeout(() => {
-              // potential race condition solution for some websites
               clearCanvas();
             }, 500);
 
@@ -300,14 +306,6 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
             ctx,
             'locked',
           );
-
-          const element = inspectState.focusedDomElement;
-          const { parentCompositeFiber } = getCompositeComponentFromElement(element);
-
-          if (!parentCompositeFiber) return;
-
-          const didRender = didFiberRender(parentCompositeFiber);
-          renderPropsAndState(didRender, parentCompositeFiber);
 
           const keyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {

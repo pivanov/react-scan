@@ -9,7 +9,6 @@ import {
 } from 'bippy';
 import { type Fiber } from 'react-reconciler';
 import { type ComponentState } from 'react';
-import { LRUMap } from '@web-utils/lru';
 import { ReactScanInternals, Store } from '../../index';
 
 interface OverrideMethods {
@@ -20,12 +19,6 @@ interface OverrideMethods {
     | ((fiber: Fiber, id: string, path: Array<any>, value: any) => void)
     | null;
 }
-
-interface CacheEntry {
-  rect: DOMRect;
-  timestamp: number;
-}
-
 interface ReactRootContainer {
   _reactRootContainer?: {
     _internalRoot?: {
@@ -46,75 +39,6 @@ interface ReactRenderer {
   overrideProps?: (fiber: Fiber, path: Array<string>, value: any) => void;
   overrideHookState?: (fiber: Fiber, id: string, path: Array<any>, value: any) => void;
 }
-
-const RECT_CACHE_TTL = 100;
-const RECT_CACHE_SIZE = 100;
-const BATCH_SIZE = 10;
-
-let rectCleanupTimeout: TTimer | null = null;
-const rectCache = new LRUMap<Element, CacheEntry>(RECT_CACHE_SIZE);
-
-// Keep track of elements we need to check
-const elementsToCheck = new Set<Element>();
-
-const cleanupRectCache = () => {
-  if (rectCleanupTimeout) {
-    clearTimeout(rectCleanupTimeout);
-    rectCleanupTimeout = null;
-  }
-
-  const now = performance.now();
-  let cleanupCount = 0;
-
-  // Process only the elements we know about
-  for (const element of elementsToCheck) {
-    if (cleanupCount >= BATCH_SIZE) break;
-
-    const entry = rectCache.get(element);
-    if (!entry) {
-      elementsToCheck.delete(element);
-      continue;
-    }
-
-    if (now - entry.timestamp > RECT_CACHE_TTL) {
-      rectCache.delete(element);
-      elementsToCheck.delete(element);
-      cleanupCount++;
-    }
-  }
-
-  // Schedule next cleanup only if we have elements to check
-  if (elementsToCheck.size > 0) {
-    rectCleanupTimeout = setTimeout(cleanupRectCache, RECT_CACHE_TTL);
-  }
-};
-
-const getCachedRect = (element: Element): DOMRect => {
-  if (!element || !(element instanceof Element)) {
-    return new DOMRect();
-  }
-
-  const cached = rectCache.get(element);
-  const now = performance.now();
-
-  if (cached && (now - cached.timestamp) < RECT_CACHE_TTL) {
-    return cached.rect;
-  }
-
-  try {
-    const rect = element.getBoundingClientRect();
-    rectCache.set(element, { rect, timestamp: now });
-    elementsToCheck.add(element);
-
-    if (!rectCleanupTimeout) {
-      rectCleanupTimeout = setTimeout(cleanupRectCache, RECT_CACHE_TTL);
-    }
-
-    return rect;
-  } catch (error) {
-    return new DOMRect();
-  }
-};
 
 export const getFiberFromElement = (element: Element): Fiber | null => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
@@ -240,12 +164,39 @@ export const getChangedProps = (fiber: Fiber): Set<string> => {
   const previousProps = fiber.alternate.memoizedProps || {};
   const currentProps = fiber.memoizedProps || {};
 
+  const isDifferent = (a: any, b: any): boolean => {
+    // Quick reference check
+    if (a === b) return false;
+
+    // Handle functions
+    if (typeof a === 'function') return true;
+
+    // For objects, only check if reference changed at top level
+    if (typeof a === 'object' && a !== null) {
+      // Don't do deep comparison, just check if reference changed
+      return true;
+    }
+
+    // For primitives
+    return !Object.is(a, b);
+  };
+
+  // Check top-level props
   for (const key in currentProps) {
     if (key === 'children') continue;
-    if (!Object.is(currentProps[key], previousProps[key])) {
+    if (isDifferent(currentProps[key], previousProps[key])) {
       changes.add(key);
     }
   }
+
+  // Check for deleted props
+  for (const key in previousProps) {
+    if (key === 'children') continue;
+    if (!(key in currentProps)) {
+      changes.add(key);
+    }
+  }
+
   return changes;
 };
 
@@ -381,7 +332,7 @@ export const getCompositeComponentFromElement = (element: Element) => {
     : (associatedFiber.alternate ?? associatedFiber);
   const stateNode = getFirstStateNode(currentAssociatedFiber);
   if (!stateNode) return {};
-  const targetRect = getCachedRect(stateNode);
+  const targetRect = stateNode.getBoundingClientRect(); // causes reflow, be careful
   if (!targetRect) return {};
   const anotherRes = getParentCompositeFiber(currentAssociatedFiber);
   if (!anotherRes) {
@@ -632,21 +583,6 @@ export const getOverrideMethods = (): OverrideMethods => {
   return { overrideProps, overrideHookState };
 };
 
-export const cleanup = () => {
-  if (rectCleanupTimeout) {
-    clearTimeout(rectCleanupTimeout);
-    rectCleanupTimeout = null;
-  }
-
-  // First delete all elements from cache
-  for (const element of elementsToCheck) {
-    rectCache.delete(element);
-  }
-
-  // Then clear the tracking set
-  elementsToCheck.clear();
-};
-
 export const getCurrentProps = (fiber: Fiber) => {
   return fiber.memoizedProps || {};
 };
@@ -667,33 +603,26 @@ export const getCurrentState = (fiber: Fiber | null) => {
 
       let index = 0;
       while (memoizedState) {
-        if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
+        // Check for both queue and lastRenderedState
+        if (memoizedState.queue?.lastRenderedState !== undefined) {
           const name = stateNames[index] ?? `state${index}`;
 
-          // Get the latest rendered state from the queue
-          let value = memoizedState.next?.queue?.lastRenderedState ?? memoizedState.memoizedState;
+          // Get the latest rendered state
+          const value = memoizedState.queue.lastRenderedState;
 
-          // If there are any pending updates, apply them
-          if (memoizedState.queue.pending) {
-            const pending = memoizedState.queue.pending;
-            const first = pending.next;
-            let update = first;
-
-            do {
-              if (update?.payload) {
-                value = typeof update.payload === 'function'
-                  ? update.payload(value)
-                  : update.payload;
-              }
-              update = update.next;
-            } while (update !== null && update !== first);
+          // Preserve the type of the value
+          if (Array.isArray(value)) {
+            state[name] = [...value];
+          } else if (typeof value === 'object' && value !== null) {
+            state[name] = { ...value };
+          } else {
+            state[name] = value;
           }
-
-          state[name] = value;
         }
         memoizedState = memoizedState.next;
         index++;
       }
+
       return state;
     }
   } catch {

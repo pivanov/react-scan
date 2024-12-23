@@ -55,7 +55,9 @@ function TodoList({ items, onDelete }: {
           todo={todo}
           obj={{
             pivanov: {
-              more: 'value'
+              more: {
+                deep: "test"
+              }
             }
           }}
           onDelete={() => onDelete(todo.id)}
@@ -67,7 +69,7 @@ function TodoList({ items, onDelete }: {
 
 function TodoItem({ todo, onDelete, obj }: {
   todo: Todo;
-  obj: any;
+  obj: unknown;
   onDelete: () => void;
 }) {
   return (

@@ -107,23 +107,16 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
   const componentName = fiber.type?.displayName || fiber.type?.name || 'Unknown';
 
-  // Reset tracking only if:
-  // 1. Different component type AND
-  // 2. Not a parent-child relationship
+  // Reset tracking only when switching to a different component type
   if (lastInspectedFiber?.type !== fiber.type) {
-    const isParentChild = isParentChildRelationship(lastInspectedFiber, fiber);
-    if (!isParentChild) {
-      if (lastInspectedFiber) {
-        Store.reportData.delete(lastInspectedFiber);
-        Store.reportData.delete(fiber);
-        if (fiber.alternate) {
-          Store.reportData.delete(fiber.alternate);
-        }
-      }
-      // Clear all tracking
-      stateChanges.counts.clear();
-      stateChanges.lastValues.clear();
+    // Different component type - reset everything
+    Store.reportData.delete(fiber);
+    if (fiber.alternate) {
+      Store.reportData.delete(fiber.alternate);
     }
+    // Clear all tracking
+    stateChanges.counts.clear();
+    stateChanges.lastValues.clear();
   }
   lastInspectedFiber = fiber;
 
@@ -656,6 +649,11 @@ export const createPropertyElement = (
 
                 value = convertedValue;
 
+                // Reset render count for this component
+                Store.reportData.delete(fiber);
+                if (fiber.alternate) {
+                  Store.reportData.delete(fiber.alternate);
+                }
                 // First apply the state/prop update
                 tryOrElse(() => {
                   if (section === 'props' && overrideProps) {
@@ -665,6 +663,7 @@ export const createPropertyElement = (
                       const path = parts.filter(part => part !== 'props' && part !== componentName);
                       path.push(key);
                       overrideProps(fiber, path, convertedValue);
+
                     } else {
                       overrideProps(fiber, [key], convertedValue);
                     }
@@ -913,25 +912,4 @@ const createAndHandleFlashOverlay = (container: HTMLElement) => {
 
     fadeOutTimers.set(flashOverlay, timerId);
   }
-};
-
-// Helper to check if fibers are in a parent-child relationship
-const isParentChildRelationship = (fiberA: Fiber | null, fiberB: Fiber | null): boolean => {
-  if (!fiberA || !fiberB) return false;
-
-  // Check if A is parent of B
-  let current = fiberB;
-  while (current.return) {
-    if (current.return === fiberA) return true;
-    current = current.return;
-  }
-
-  // Check if B is parent of A
-  current = fiberA;
-  while (current.return) {
-    if (current.return === fiberB) return true;
-    current = current.return;
-  }
-
-  return false;
 };
