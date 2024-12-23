@@ -99,29 +99,83 @@ const templates = {
 // Track previous values to detect actual changes
 let lastInspectedFiber: Fiber | null = null;
 
+// Track state change counts separately from render count
+const stateChanges = {
+  counts: new Map<string, number>(),
+  lastValues: new Map<string, any>()
+};
+
 export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propContainer = Store.inspectState.value.propContainer;
   if (!propContainer) return;
 
   const componentName = fiber.type?.displayName || fiber.type?.name || 'Unknown';
-  const componentKey = String(fiber.alternate?._debugID ?? fiber._debugID ?? '');
+
+  // Reset tracking in two cases:
+  // 1. Different component type
+  // 2. Same type but different fiber instance (component re-mounted)
+  if (lastInspectedFiber?.type !== fiber.type || lastInspectedFiber !== fiber) {
+    if (lastInspectedFiber) {
+      Store.reportData.delete(lastInspectedFiber);
+      Store.reportData.delete(fiber);
+      if (fiber.alternate) {
+        Store.reportData.delete(fiber.alternate);
+      }
+    }
+    // Clear all tracking
+    stateChanges.counts.clear();
+    stateChanges.lastValues.clear();
+  }
+  lastInspectedFiber = fiber;
 
   // Get render data from Store
   const reportData = Store.reportData.get(fiber);
   const renderCount = reportData?.count ?? 0;
 
-  // Reset tracking if we switched to a different component
-  if (lastInspectedFiber?.type !== fiber.type) {
-    cumulativeChanges.state.clear();
-    cumulativeChanges.context.clear();
-    cumulativeChanges.props.clear();
-  }
-  lastInspectedFiber = fiber;
-
   // Get current changes
   const changedProps = new Set(getChangedProps(fiber));
   const changedState = new Set(getChangedState(fiber));
   const changedContext = new Set(getChangedContext(fiber));
+
+  // Track state changes
+  changedState.forEach(key => {
+    // Find the correct hook state value
+    let memoizedState = fiber.memoizedState;
+    let index = 0;
+    const stateNames = getStateNames(fiber);
+
+    while (memoizedState) {
+      if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
+        const name = stateNames[index] ?? `state${index}`;
+        if (name === key) {
+          const currentValue = memoizedState.memoizedState;
+          const lastValue = stateChanges.lastValues.get(key);
+
+          // Check if value actually changed
+          const hasChanged = !Object.is(currentValue, lastValue);
+
+          // For arrays, check if length changed
+          const isArrayLengthChange = Array.isArray(currentValue) &&
+            (!Array.isArray(lastValue) || currentValue.length !== lastValue.length);
+
+          // For input, check if value changed
+          const isInputChange = name === 'input' && hasChanged;
+
+          // Increment count if array length changed or input changed
+          if (isArrayLengthChange || isInputChange) {
+            const count = stateChanges.counts.get(key) ?? 0;
+            stateChanges.counts.set(key, count + 1);
+          }
+
+          // Always update last value
+          stateChanges.lastValues.set(key, currentValue);
+          break;
+        }
+        index++;
+      }
+      memoizedState = memoizedState.next;
+    }
+  });
 
   propContainer.innerHTML = '';
 
@@ -131,60 +185,17 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
   let hasAnyChanges = false;
 
-  // Track state changes
-  if (changedState.size > 0) {
-    changedState.forEach(key => {
-      const fullKey = `${componentKey}:${key}`;
-      cumulativeChanges.state.set(fullKey, renderCount);
-    });
-  }
-
-  // Similar changes for context tracking...
-  if (changedContext.size > 0) {
-    changedContext.forEach(key => {
-      const fullKey = `${componentKey}:${key}`;
-      cumulativeChanges.context.set(fullKey, renderCount);
-    });
-  }
-
-  // Show all props that changed
-  if (changedProps.size > 0) {
-    const propsHeader = templates.header();
-    propsHeader.textContent = 'Props:';
-    const propsList = templates.changeList();
-
-    let hasVisibleProps = false;
-    changedProps.forEach(key => {
-      const count = reportData?.count || 0;
-
-      if (count > 0) {
-        hasVisibleProps = true;
-        hasAnyChanges = true;
-        const li = templates.listItem();
-        li.textContent = `${key} ×${count}`;
-        propsList.appendChild(li);
-      }
-    });
-
-    if (hasVisibleProps) {
-      whatChangedSection.appendChild(propsHeader);
-      whatChangedSection.appendChild(propsList);
-    }
-  }
-
-  // Make sure state changes are visible
+  // Show state changes in yellow section
   if (changedState.size > 0) {
     const stateHeader = templates.header();
     stateHeader.textContent = 'State:';
     const stateList = templates.changeList();
 
-    let hasVisibleState = false;
+    let hasVisibleStateChanges = false;  // Track if we have any non-zero changes
     changedState.forEach(key => {
-      const fullKey = `${componentKey}:${key}`;
-      const count = cumulativeChanges.state.get(fullKey) ?? 0;
-
-      if (count > 0) {
-        hasVisibleState = true;
+      const count = stateChanges.counts.get(key) ?? 0;
+      if (count > 0) {  // Only show if count > 0
+        hasVisibleStateChanges = true;
         hasAnyChanges = true;
         const li = templates.listItem();
         li.textContent = `${key} ×${count}`;
@@ -192,13 +203,37 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
       }
     });
 
-    if (hasVisibleState) {
+    // Only append state section if we have visible changes
+    if (hasVisibleStateChanges) {
       whatChangedSection.appendChild(stateHeader);
       whatChangedSection.appendChild(stateList);
     }
   }
 
-  // Show context that changed
+  // Show props changes in yellow section
+  if (changedProps.size > 0) {
+    const propsHeader = templates.header();
+    propsHeader.textContent = 'Props:';
+    const propsList = templates.changeList();
+
+    let hasVisibleProps = false;
+    changedProps.forEach(key => {
+      if (renderCount > 0) {  // Only show if there are actual renders
+        hasVisibleProps = true;
+        hasAnyChanges = true;
+        const li = templates.listItem();
+        li.textContent = `${key} ×${renderCount}`;
+        propsList.appendChild(li);
+      }
+    });
+
+    if (hasVisibleProps) {  // Only append if we have visible changes
+      whatChangedSection.appendChild(propsHeader);
+      whatChangedSection.appendChild(propsList);
+    }
+  }
+
+  // Show context changes in yellow section
   if (changedContext.size > 0) {
     const contextHeader = templates.header();
     contextHeader.textContent = 'Context:';
@@ -206,32 +241,16 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
     let hasVisibleContext = false;
     changedContext.forEach(key => {
-      if (key.startsWith('context.')) {
-        const fullKey = `${componentKey}:${key}`;
-        const count = cumulativeChanges.context.get(fullKey) ?? 0;
-
-        if (count > 0) {
-          hasVisibleContext = true;
-          hasAnyChanges = true;
-          const li = templates.listItem();
-          li.textContent = `${key.replace('context.', '')} ×${count}`;
-          contextList.appendChild(li);
-        }
-      } else {
-        const fullKey = `${componentKey}:${key}`;
-        const count = cumulativeChanges.context.get(fullKey) ?? 0;
-
-        if (count > 0) {
-          hasVisibleContext = true;
-          hasAnyChanges = true;
-          const li = templates.listItem();
-          li.textContent = `${key} ×${count}`;
-          contextList.appendChild(li);
-        }
+      if (renderCount > 0) {  // Only show if there are actual renders
+        hasVisibleContext = true;
+        hasAnyChanges = true;
+        const li = templates.listItem();
+        li.textContent = `${key.replace('context.', '')} ×${renderCount}`;
+        contextList.appendChild(li);
       }
     });
 
-    if (hasVisibleContext) {
+    if (hasVisibleContext) {  // Only append if we have visible changes
       whatChangedSection.appendChild(contextHeader);
       whatChangedSection.appendChild(contextList);
     }
@@ -242,7 +261,7 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     Store.wasDetailsOpen.value = whatChangedSection.open;
   });
 
-  // Only append the section if we have any changes to show
+  // Only show the yellow section if there were changes
   if (hasAnyChanges) {
     propContainer.appendChild(whatChangedSection);
   }

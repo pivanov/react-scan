@@ -238,12 +238,25 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
 
     const stateNames = getStateNames(fiber);
 
-    while (memoizedState) {
-      if (!previousState) break;
-
+    while (memoizedState && previousState) {
       if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
-        const name = stateNames[index] ?? `state_${index}`;
-        if (!Object.is(memoizedState.memoizedState, previousState.memoizedState)) {
+        const name = stateNames[index] ?? `state${index}`;
+        const currentValue = memoizedState.memoizedState;
+        const prevValue = previousState.memoizedState;
+
+        // eslint-disable-next-line no-console
+        console.log(`State Check [${name}]:`, {
+          currentValue,
+          prevValue,
+          isArray: Array.isArray(currentValue),
+          currentLength: Array.isArray(currentValue) ? currentValue.length : null,
+          prevLength: Array.isArray(prevValue) ? prevValue.length : null,
+          isSameReference: currentValue === prevValue,
+          isObjectIs: Object.is(currentValue, prevValue)
+        });
+
+        // Only add to changes if values are actually different
+        if (!Object.is(currentValue, prevValue)) {
           changes.add(name);
         }
         index++;
@@ -254,14 +267,17 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
   } else if (fiber.tag === ClassComponentTag) {
     if (!fiber.memoizedState) return changes;
 
-    const currentState = fiber.memoizedState || {};
-    const previousState = fiber.alternate?.memoizedState || {};
+    const currentState = fiber.memoizedState;
+    const previousState = fiber.alternate?.memoizedState;
 
-    const keys = Object.keys(currentState);
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      if (!Object.is(currentState[key], previousState[key])) {
-        changes.add(key);
+    if (currentState && previousState) {
+      for (const key in currentState) {
+        const currentValue = currentState[key];
+        const prevValue = previousState[key];
+
+        if (!Object.is(currentValue, prevValue)) {
+          changes.add(key);
+        }
       }
     }
   }
