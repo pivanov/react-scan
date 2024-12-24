@@ -15,6 +15,7 @@ import {
   getPropsChangeCount,
   getContextChangeCount,
   getPropsOrder,
+  // trackStateUpdate,
 } from './utils';
 
 // Types and Interfaces
@@ -139,8 +140,8 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const changedState = getChangedState(fiber);
   const changedContext = getChangedContext(fiber);
 
-  console.log('@@@ changedProps', changedProps);
-  // console.log('@@@ changedState', changedState);
+  // console.log('@@@ changedProps', changedProps);
+  console.log('@@@ changedState', changedState);
   // console.log('@@@ changedContext', changedContext);
 
   propContainer.innerHTML = '';
@@ -758,6 +759,8 @@ export const createPropertyElement = ({
 
                     // Update the primitive state value directly
                     overrideHookState(fiber, hookId, [], convertedValue);
+                    // Track the state update
+                    // trackStateUpdate(key, convertedValue);
                   } else {
                     // For nested state updates
                     const fullPathParts = parentPath.split('.');
@@ -779,13 +782,15 @@ export const createPropertyElement = ({
 
                     nestedPath.push(key);
                     overrideHookState(fiber, hookId, nestedPath, convertedValue);
+                    // Track the state update for nested values
+                    // trackStateUpdate(baseStateKey, convertedValue);
                   }
                 }
 
-                // Trigger flash overlay for the edited value and its parent
-                const currentPath = getPath(componentName, section, parentPath, key);
-                changedAt.set(currentPath, Date.now());
-                createAndHandleFlashOverlay(container);
+                // // Trigger flash overlay for the edited value and its parent
+                // const currentPath = getPath(componentName, section, parentPath, key);
+                // changedAt.set(currentPath, Date.now());
+                // createAndHandleFlashOverlay(container);
 
                 if (parentPath) {
                   const parentParts = parentPath.split('.');
@@ -800,9 +805,6 @@ export const createPropertyElement = ({
                     createAndHandleFlashOverlay(parentContainer);
                   }
                 }
-
-                // Re-render the yellow box to show the changes
-                // renderPropsAndState(true, fiber);
 
               } catch (error) {
                 if (input.parentNode) {

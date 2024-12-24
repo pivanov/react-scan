@@ -35,6 +35,7 @@ const stateChangeCounts = new Map<string, number>();
 const propsChangeCounts = new Map<string, number>();
 const contextChangeCounts = new Map<string, number>();
 const lastRendered = new Map<string, unknown>();
+const pendingStateUpdates = new Map<string, unknown>();
 
 // Reset all tracking
 export const resetStateTracking = (): void => {
@@ -42,6 +43,18 @@ export const resetStateTracking = (): void => {
   propsChangeCounts.clear();
   contextChangeCounts.clear();
   lastRendered.clear();
+  pendingStateUpdates.clear();
+};
+
+// Track state updates directly
+export const trackStateUpdate = (name: string, value: unknown): void => {
+  const currentValue = pendingStateUpdates.get(name);
+  // Only track if the value actually changed
+  if (!Object.is(currentValue, value)) {
+    pendingStateUpdates.set(name, value);
+    const count = (stateChangeCounts.get(name) ?? 0) + 1;
+    stateChangeCounts.set(name, count);
+  }
 };
 
 // Simple change detection for props
@@ -113,7 +126,36 @@ export const getChangedProps = (fiber: Fiber): Set<string> => {
 // Simple change detection for state
 export const getChangedState = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
-  if (!fiber.alternate) return changes;
+  if (!fiber.alternate) {
+    // For initial mount, check if any state values are non-default
+    let currentState = fiber.memoizedState;
+    const stateNames = getStateNames(fiber);
+    let index = 0;
+
+    while (currentState) {
+      if (currentState.queue) {
+        const currentValue = currentState.memoizedState;
+        const name = stateNames[index] ?? `state${index}`;
+
+        // Check if the value is different from default values
+        const isNonDefault =
+          (typeof currentValue === 'string' && currentValue !== '') ||
+          (typeof currentValue === 'number' && currentValue !== 0) ||
+          (typeof currentValue === 'boolean' && currentValue) ||
+          (Array.isArray(currentValue) && currentValue.length > 0) ||
+          (typeof currentValue === 'object' && currentValue !== null && Object.keys(currentValue).length > 0);
+
+        if (isNonDefault) {
+          changes.add(name);
+          const count = (stateChangeCounts.get(name) ?? 0) + 1;
+          stateChangeCounts.set(name, count);
+        }
+        index++;
+      }
+      currentState = currentState.next;
+    }
+    return changes;
+  }
 
   let currentState = fiber.memoizedState;
   let previousState = fiber.alternate.memoizedState;
@@ -128,25 +170,52 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
     if (currentState.queue) {
       const currentValue = currentState.memoizedState;
       const previousValue = previousState.memoizedState;
-      const hasPendingUpdates = currentState.queue.pending !== null;
       const name = stateNames[index] ?? `state${index}`;
 
-      // Always track initial state value
-      const isInitialChange = !lastRendered.has(`${fiber.type?.name}_${name}`);
-      if (isInitialChange) {
-        lastRendered.set(`${fiber.type?.name}_${name}`, currentValue);
-        changes.add(name);
-        const count = (stateChangeCounts.get(name) ?? 0) + 1;
-        stateChangeCounts.set(name, count);
-      }
-      // Track changes if value is different or there are pending updates
-      else if (hasPendingUpdates || !Object.is(currentValue, previousValue)) {
-        changes.add(name);
-        lastRendered.set(`${fiber.type?.name}_${name}`, currentValue);
+      // Check for pending updates we tracked
+      const hasPendingUpdate = pendingStateUpdates.has(name);
+      const pendingValue = pendingStateUpdates.get(name);
 
-        // Only increment count for primitive values or when there are pending updates
-        if (hasPendingUpdates ||
-          !(typeof currentValue === 'function' ||
+      // Get the latest value by applying all updates
+      let latestValue = currentValue;
+      let hasQueuedChanges = false;
+
+      // Check pending queue
+      if (currentState.queue.pending) {
+        const pending = currentState.queue.pending;
+        let update = pending.next;
+        do {
+          if (update?.payload) {
+            const nextValue = typeof update.payload === 'function'
+              ? update.payload(latestValue)
+              : update.payload;
+            if (!Object.is(latestValue, nextValue)) {
+              hasQueuedChanges = true;
+              latestValue = nextValue;
+            }
+          }
+          update = update.next;
+        } while (update !== pending.next);
+      }
+
+      // Track changes if:
+      // 1. Value is different from previous render
+      // 2. We have a tracked pending update
+      // 3. We have queued changes
+      if (!Object.is(currentValue, previousValue) ||
+        (hasPendingUpdate && !Object.is(pendingValue, currentValue)) ||
+        hasQueuedChanges) {
+        changes.add(name);
+
+        // If we have a pending update, use that for counting
+        if (hasPendingUpdate) {
+          const count = (stateChangeCounts.get(name) ?? 0) + 1;
+          stateChangeCounts.set(name, count);
+          // Clear the pending update after using it
+          pendingStateUpdates.delete(name);
+        }
+        // Otherwise increment count for primitive values
+        else if (!(typeof currentValue === 'function' ||
             (typeof currentValue === 'object' && currentValue !== null))) {
           primitiveChangeCount++;
           const count = (stateChangeCounts.get(name) ?? 0) + 1;
@@ -154,10 +223,11 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
         }
       }
 
-      // If we had primitive changes, also track non-primitive state values
+      // If we had primitive changes, also track non-primitive state values that changed
       if (primitiveChangeCount > 0 &&
         (typeof currentValue === 'function' ||
-          (typeof currentValue === 'object' && currentValue !== null))) {
+          (typeof currentValue === 'object' && currentValue !== null)) &&
+        !Object.is(currentValue, previousValue)) {
         changes.add(name);
         const count = (stateChangeCounts.get(name) ?? 0) + primitiveChangeCount;
         stateChangeCounts.set(name, count);
@@ -173,9 +243,21 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
   while (currentState) {
     if (currentState.queue) {
       const name = stateNames[index] ?? `state${index}`;
-      changes.add(name);
-      const count = (stateChangeCounts.get(name) ?? 0) + 1;
-      stateChangeCounts.set(name, count);
+      const value = currentState.memoizedState;
+
+      // Only add if the value is non-default
+      const isNonDefault =
+        (typeof value === 'string' && value !== '') ||
+        (typeof value === 'number' && value !== 0) ||
+        (typeof value === 'boolean' && value) ||
+        (Array.isArray(value) && value.length > 0) ||
+        (typeof value === 'object' && value !== null && Object.keys(value).length > 0);
+
+      if (isNonDefault) {
+        changes.add(name);
+        const count = (stateChangeCounts.get(name) ?? 0) + 1;
+        stateChangeCounts.set(name, count);
+      }
       index++;
     }
     currentState = currentState.next;
