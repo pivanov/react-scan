@@ -621,6 +621,9 @@ export const createPropertyElement = (
           valueElement.addEventListener('click', (e) => {
             e.stopPropagation();
 
+            // Reset tracking when starting to edit
+            resetStateTracking();
+
             const input = templates.input();
             input.value = typeof value === 'string' ?
               value.replace(/^"(?:.*)"$/, '$1')
@@ -646,34 +649,31 @@ export const createPropertyElement = (
                 value = convertedValue;
 
                 // First apply the state/prop update
-                tryOrElse(() => {
-                  if (section === 'props' && overrideProps) {
-                    if (parentPath) {
-                      const parts = parentPath.split('.');
-                      // Get only the actual prop path parts (after 'props')
-                      const path = parts.filter(part => part !== 'props' && part !== componentName);
-                      path.push(key);
-                      overrideProps(fiber, path, convertedValue);
-                    } else {
-                      overrideProps(fiber, [key], convertedValue);
-                    }
-                  } else if (section === 'state' && overrideHookState) {
-                    // Handle primitive state values (no path) differently
-                    if (!parentPath) {
-                      const stateNames = getStateNames(fiber);
-                      const namedStateIndex = stateNames.indexOf(key);
-                      const hookId = namedStateIndex !== -1 ?
-                        namedStateIndex.toString() :
-                        '0';
+                if (section === 'props' && overrideProps) {
+                  if (parentPath) {
+                    const parts = parentPath.split('.');
+                    // Get only the actual prop path parts (after 'props')
+                    const path = parts.filter(part => part !== 'props' && part !== componentName);
+                    path.push(key);
+                    overrideProps(fiber, path, convertedValue);
+                  } else {
+                    overrideProps(fiber, [key], convertedValue);
+                  }
+                }
 
-                      // Update the primitive state value directly
-                      overrideHookState(fiber, hookId, [], convertedValue);
+                if (section === 'state' && overrideHookState) {
+                  // Handle primitive state values (no path) differently
+                  if (!parentPath) {
+                    const stateNames = getStateNames(fiber);
+                    const namedStateIndex = stateNames.indexOf(key);
+                    const hookId = namedStateIndex !== -1 ?
+                      namedStateIndex.toString() :
+                      '0';
 
-                      // Force a re-render to update the yellow box
-                      Store.lastReportTime.value = Date.now();
-                      return;
-                    }
-
+                    console.log('@@@ 1.1');
+                    // Update the primitive state value directly
+                    overrideHookState(fiber, hookId, [], convertedValue);
+                  } else {
                     // For nested state updates
                     const fullPathParts = parentPath.split('.');
                     const stateIndex = fullPathParts.indexOf('state');
@@ -694,32 +694,31 @@ export const createPropertyElement = (
                     nestedPath.push(key);
 
                     overrideHookState(fiber, hookId, nestedPath, convertedValue);
-
-                    // Force a re-render to update the yellow box
-                    Store.lastReportTime.value = Date.now();
                   }
-                }, null);
-
-              } catch (error) {
-                if (input.parentNode) {
-                  input.replaceWith(valueElement);
                 }
               } finally {
-                isReplacing = false;
+                // Reset isReplacing in the next frame
+                setTimeout(() => {
+                  console.log('@@@ 1.2');
+                  isReplacing = false;
+                }, 0);
               }
             };
 
-            input.addEventListener('blur', updateValue);
-            input.addEventListener('keydown', (event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
+            input.addEventListener('keydown', (e: KeyboardEvent) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
                 updateValue();
-              } else if (event.key === 'Escape') {
-                isReplacing = true;
+              } else if (e.key === 'Escape') {
                 if (input.parentNode) {
                   input.replaceWith(valueElement);
                 }
               }
+            });
+
+            // Add blur handler to update when focus is lost
+            input.addEventListener('blur', () => {
+              updateValue();
             });
 
             valueElement.replaceWith(input);

@@ -29,13 +29,6 @@ interface ReactInternalProps {
   [key: string]: Fiber;
 }
 
-interface ReactRenderer {
-  bundleType: number;
-  rendererPackageName?: string;
-  overrideProps?: (fiber: Fiber, path: Array<string>, value: any) => void;
-  overrideHookState?: (fiber: Fiber, id: string, path: Array<any>, value: any) => void;
-}
-
 interface ContextDependency<T = unknown> {
   context: ReactContext<T>;
   next: ContextDependency<T> | null;
@@ -465,17 +458,17 @@ export const hasValidParent = () => {
 export const getOverrideMethods = (): OverrideMethods => {
   let overrideProps = null;
   let overrideHookState = null;
-
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
     const { renderers } = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (renderers) {
-      for (const [, renderer] of Array.from(renderers)) {
+      for (const [_, renderer] of Array.from(renderers)) {
         try {
-          const typedRenderer = renderer as unknown as ReactRenderer;
-
-          if (typedRenderer.bundleType === 1 && typedRenderer.rendererPackageName === 'react-dom') {
-            overrideProps = typedRenderer.overrideProps ?? null;
-            overrideHookState = typedRenderer.overrideHookState ?? null;
+          // @ts-expect-error - renderer methods are not typed
+          if (renderer.overrideProps && renderer.overrideHookState) {
+            // @ts-expect-error - renderer methods are not typed
+            overrideProps = renderer.overrideProps.bind(renderer);
+            // @ts-expect-error - renderer methods are not typed
+            overrideHookState = renderer.overrideHookState.bind(renderer);
             break;
           }
         } catch (e) {
