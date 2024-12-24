@@ -8,7 +8,7 @@ import TodoDemo from '@/components/todo-demo';
 import ContextDemo from '../components/context-demo';
 
 export default function Home() {
-  const [showDemo, setShowDemo] = useState(false);
+  const [showDemo, setShowDemo] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {

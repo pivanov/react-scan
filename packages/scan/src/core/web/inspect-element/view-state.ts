@@ -16,7 +16,6 @@ import {
   getStateChangeCount,
   getPropsChangeCount,
   getContextChangeCount,
-  resetStateKeyTracking,
 } from './utils';
 
 const EXPANDED_PATHS = new Set<string>();
@@ -103,6 +102,9 @@ let lastInspectedFiber: Fiber | null = null;
 export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propContainer = Store.inspectState.value.propContainer;
   if (!propContainer) return;
+
+  // eslint-disable-next-line no-console
+  console.log('renderPropsAndState', didRender);
 
   const componentName = fiber.type?.displayName || fiber.type?.name || 'Unknown';
 
@@ -664,9 +666,6 @@ export const createPropertyElement = (
                         namedStateIndex.toString() :
                         '0';
 
-                      // Reset tracking for this state key with new value
-                      resetStateKeyTracking(key, convertedValue);
-
                       // Update the primitive state value directly
                       overrideHookState(fiber, hookId, [], convertedValue);
                       return;
@@ -679,9 +678,6 @@ export const createPropertyElement = (
 
                     const statePath = fullPathParts.slice(stateIndex + 1);
                     const baseStateKey = statePath[0];
-
-                    // Reset tracking for the base state key with new value
-                    resetStateKeyTracking(baseStateKey, convertedValue);
 
                     const stateNames = getStateNames(fiber);
                     const namedStateIndex = stateNames.indexOf(baseStateKey);
@@ -831,7 +827,7 @@ export const cleanup = () => {
   // Clear all expanded paths
   EXPANDED_PATHS.clear();
 
-  // Clean up all active overlays
+  // Clean up all active overlays and ensure proper garbage collection
   activeOverlays.forEach(cleanupFlashOverlay);
   activeOverlays.clear();
 
@@ -840,6 +836,22 @@ export const cleanup = () => {
     clearInterval(changedAtInterval);
     changedAtInterval = null;
   }
+
+  // Clear all timers from active overlays
+  activeOverlays.forEach((overlay) => {
+    const timer = fadeOutTimers.get(overlay);
+    if (timer) {
+      clearTimeout(timer);
+      fadeOutTimers.delete(overlay);
+    }
+  });
+
+  // Clear tracking maps
+  changedAt.clear();
+  lastRendered.clear();
+
+  // Reset last inspected fiber
+  lastInspectedFiber = null;
 };
 
 const cleanupFlashOverlay = (overlay: HTMLElement) => {
@@ -855,34 +867,48 @@ const cleanupFlashOverlay = (overlay: HTMLElement) => {
 };
 
 const createAndHandleFlashOverlay = (container: HTMLElement) => {
-  // Try to reuse existing flash overlay
+  // Use a single query selector call and cache the result
   const existingOverlay = container.querySelector('.react-scan-flash-overlay');
-  const flashOverlay = existingOverlay instanceof HTMLElement
-    ? existingOverlay
-    : templates.flashOverlay();
 
-  if (!existingOverlay) {
-    container.appendChild(flashOverlay);
-    activeOverlays.add(flashOverlay);
-  }
+  // Reuse existing overlay if possible
+  const flashOverlay = existingOverlay instanceof HTMLElement ? existingOverlay : (() => {
+    const newOverlay = templates.flashOverlay();
+    container.appendChild(newOverlay);
+    activeOverlays.add(newOverlay);
+    return newOverlay;
+  })();
 
-  // Reset the overlay state
-  if (flashOverlay instanceof HTMLElement) {
-    flashOverlay.style.transition = 'none';
-    flashOverlay.style.opacity = '.9';
+  // Batch style updates using requestAnimationFrame
+  requestAnimationFrame(() => {
+    // Reset the overlay state
+    flashOverlay.style.cssText = `
+      transition: none;
+      opacity: 0.9;
+    `;
 
-    // Clear any existing timer for this element
+    // Clear any existing timer
     const existingTimer = fadeOutTimers.get(flashOverlay);
     if (existingTimer !== undefined) {
       clearTimeout(existingTimer);
       fadeOutTimers.delete(flashOverlay);
     }
 
-    // Set new timer
+    // Set new timer with cleanup
     const timerId = setTimeout(() => {
-      cleanupFlashOverlay(flashOverlay);
+      // Use opacity transition for smooth fade out
+      flashOverlay.style.transition = 'opacity 150ms ease-out';
+      flashOverlay.style.opacity = '0';
+
+      // Remove overlay after transition
+      const cleanupTimer = setTimeout(() => {
+        cleanupFlashOverlay(flashOverlay);
+        fadeOutTimers.delete(flashOverlay);
+      }, 150);
+
+      // Store the cleanup timer
+      fadeOutTimers.set(flashOverlay, cleanupTimer);
     }, 300);
 
     fadeOutTimers.set(flashOverlay, timerId);
-  }
+  });
 };

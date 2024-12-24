@@ -282,6 +282,16 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
         case 'focused': {
           unsubscribeAll();
           recursiveRaf(() => {
+            // Check if element still exists in DOM
+            if (!document.contains(inspectState.focusedDomElement)) {
+              cancelAnimationFrame(animationId);
+              clearCanvas();
+              Store.inspectState.value = {
+                kind: 'inspect-off',
+                propContainer: inspectState.propContainer,
+              };
+              return;
+            }
             drawHoverOverlay(
               inspectState.focusedDomElement,
               canvas,
@@ -289,17 +299,8 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
               'locked',
             );
           });
-          if (!document.contains(inspectState.focusedDomElement)) {
-            setTimeout(() => {
-              clearCanvas();
-            }, 500);
 
-            Store.inspectState.value = {
-              kind: 'inspect-off',
-              propContainer: inspectState.propContainer,
-            };
-            return;
-          }
+          // Remove the redundant check since we're already checking in RAF
           drawHoverOverlay(
             inspectState.focusedDomElement,
             canvas,
@@ -407,7 +408,10 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
 
   // Simple subscriptions
   Store.inspectState.subscribe(repaint);
+
+  let rafId: ReturnType<typeof requestAnimationFrame>;
   Store.lastReportTime.subscribe(() => {
+    cancelAnimationFrame(rafId);
     const inspectState = Store.inspectState.value;
     if (inspectState.kind === 'focused') {
       const element = inspectState.focusedDomElement;
@@ -415,7 +419,9 @@ export const createInspectElementStateMachine = (shadow: ShadowRoot) => {
 
       if (parentCompositeFiber) {
         const didRender = didFiberRender(parentCompositeFiber);
-        renderPropsAndState(didRender, parentCompositeFiber);
+        rafId = requestAnimationFrame(() => {
+          renderPropsAndState(didRender, parentCompositeFiber);
+        });
       }
     }
   });
