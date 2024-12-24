@@ -634,11 +634,7 @@ export const createPropertyElement = (
                 .replace(/&#39;/g, "'")
               : value.toString();
 
-            let isReplacing = false;
             const updateValue = () => {
-              if (isReplacing) return;
-              isReplacing = true;
-
               try {
                 const newValue = input.value;
                 const convertedValue =
@@ -670,7 +666,6 @@ export const createPropertyElement = (
                       namedStateIndex.toString() :
                       '0';
 
-                    console.log('@@@ 1.1');
                     // Update the primitive state value directly
                     overrideHookState(fiber, hookId, [], convertedValue);
                   } else {
@@ -691,17 +686,15 @@ export const createPropertyElement = (
                     const nestedPath = statePath.slice(1).map(part => {
                       return /^\d+$/.test(part) ? parseInt(part, 10) : part;
                     });
-                    nestedPath.push(key);
 
+                    nestedPath.push(key);
                     overrideHookState(fiber, hookId, nestedPath, convertedValue);
                   }
                 }
-              } finally {
-                // Reset isReplacing in the next frame
-                setTimeout(() => {
-                  console.log('@@@ 1.2');
-                  isReplacing = false;
-                }, 0);
+              } catch (error) {
+                if (input.parentNode) {
+                  input.replaceWith(valueElement);
+                }
               }
             };
 

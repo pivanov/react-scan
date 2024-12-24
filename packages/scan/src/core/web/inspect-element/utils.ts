@@ -226,7 +226,12 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
   let index = 0;
   while (currentState && previousState) {
     if (currentState.queue) {
-      if (currentState.memoizedState !== previousState.memoizedState) {
+      const currentValue = currentState.memoizedState;
+      const previousValue = previousState.memoizedState;
+      const hasPendingUpdates = currentState.queue.pending !== null;
+
+      // Track changes if value is different or there are pending updates
+      if (hasPendingUpdates || !Object.is(currentValue, previousValue)) {
         const name = stateNames[index] ?? `state${index}`;
         changes.add(name);
         const count = (stateChangeCounts.get(name) ?? 0) + 1;
@@ -235,6 +240,29 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
       index++;
     }
     currentState = currentState.next;
+    previousState = previousState.next;
+  }
+
+  // Also check for new or deleted state hooks
+  while (currentState) {
+    if (currentState.queue) {
+      const name = stateNames[index] ?? `state${index}`;
+      changes.add(name);
+      const count = (stateChangeCounts.get(name) ?? 0) + 1;
+      stateChangeCounts.set(name, count);
+      index++;
+    }
+    currentState = currentState.next;
+  }
+
+  while (previousState) {
+    if (previousState.queue) {
+      const name = stateNames[index] ?? `state${index}`;
+      changes.add(name);
+      const count = (stateChangeCounts.get(name) ?? 0) + 1;
+      stateChangeCounts.set(name, count);
+      index++;
+    }
     previousState = previousState.next;
   }
 

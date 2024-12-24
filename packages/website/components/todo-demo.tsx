@@ -91,7 +91,7 @@ function TodoItem({ todo, onDelete, obj }: {
   );
 }
 
-export default function TodoDemo({ closeAction }: { closeAction: () => void }) {
+export default function TodoDemo({ closeAction, pivanov }: { closeAction: () => void, pivanov: string }) {
   const [todos, setTodos] = useState<Array<Todo>>([]);
   const [input, setInput] = useState('');
   const [isMobile, setIsMobile] = useState(false);
@@ -123,7 +123,7 @@ export default function TodoDemo({ closeAction }: { closeAction: () => void }) {
   return (
     <div className={isMobile ? mobileClasses : desktopClasses}>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-bold">Demo</h2>
+        <h2 className="text-xl font-bold">Demo {pivanov}</h2>
         <button
           onClick={closeAction}
           className="text-2xl text-gray-500 hover:text-gray-700"
