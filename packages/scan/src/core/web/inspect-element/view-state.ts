@@ -14,6 +14,8 @@ import {
   getCurrentState,
   resetStateTracking,
   getStateChangeCount,
+  getPropsChangeCount,
+  getContextChangeCount,
 } from './utils';
 
 const EXPANDED_PATHS = new Set<string>();
@@ -97,12 +99,6 @@ const templates = {
 // Track previous values to detect actual changes
 let lastInspectedFiber: Fiber | null = null;
 
-// Track state change counts separately from render count
-const stateChanges = {
-  counts: new Map<string, number>(),
-  lastValues: new Map<string, any>()
-};
-
 export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propContainer = Store.inspectState.value.propContainer;
   if (!propContainer) return;
@@ -111,26 +107,14 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
   // Reset tracking only when switching to a different component type
   if (lastInspectedFiber?.type !== fiber.type) {
-    // Different component type - reset everything
-    Store.reportData.delete(fiber);
-    if (fiber.alternate) {
-      Store.reportData.delete(fiber.alternate);
-    }
-    // Clear all tracking
-    stateChanges.counts.clear();
-    stateChanges.lastValues.clear();
     resetStateTracking();
   }
   lastInspectedFiber = fiber;
 
-  // Get render data from Store
-  const reportData = Store.reportData.get(fiber);
-  const renderCount = reportData?.count ?? 0;
-
   // Get current changes for yellow box
-  const changedProps = new Set(getChangedProps(fiber));
-  const changedState = new Set(getChangedState(fiber));
-  const changedContext = new Set(getChangedContext(fiber));
+  const changedProps = getChangedProps(fiber);
+  const changedState = getChangedState(fiber);
+  const changedContext = getChangedContext(fiber);
 
   propContainer.innerHTML = '';
 
@@ -141,7 +125,6 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   let hasAnyChanges = false;
 
   // Show state changes in yellow section
-  console.log('!@#!@#!@#', changedState.size)
   if (changedState.size > 0) {
     const stateHeader = templates.header();
     stateHeader.textContent = 'State:';
@@ -170,10 +153,11 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     const propsList = templates.changeList();
 
     changedProps.forEach(key => {
-      if (renderCount > 0) {
+      const count = getPropsChangeCount(key);
+      if (count > 0) {
         hasAnyChanges = true;
         const li = templates.listItem();
-        li.textContent = `${key} ×${renderCount}`;
+        li.textContent = `${key} ×${count}`;
         propsList.appendChild(li);
       }
     });
@@ -191,14 +175,19 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     const contextList = templates.changeList();
 
     changedContext.forEach(key => {
-      hasAnyChanges = true;
-      const li = templates.listItem();
-      li.textContent = `${key.replace('context.', '')} ×${renderCount}`;
-      contextList.appendChild(li);
+      const count = getContextChangeCount(key);
+      if (count > 0) {
+        hasAnyChanges = true;
+        const li = templates.listItem();
+        li.textContent = `${key.replace('context.', '')} ×${count}`;
+        contextList.appendChild(li);
+      }
     });
 
-    whatChangedSection.appendChild(contextHeader);
-    whatChangedSection.appendChild(contextList);
+    if (hasAnyChanges) {
+      whatChangedSection.appendChild(contextHeader);
+      whatChangedSection.appendChild(contextList);
+    }
   }
 
   // Add back the toggle listener

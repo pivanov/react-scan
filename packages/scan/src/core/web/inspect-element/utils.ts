@@ -165,6 +165,17 @@ const isDifferent = (a: any, b: any): boolean => {
   return !Object.is(a, b);
 };
 
+// Track changes for props and context
+const propsChangeCounts = new Map<string, number>();
+const lastKnownProps = new Map<string, any>();
+const initializedProps = new Set<string>();
+const propsValueSequence = new Map<string, Array<any>>();
+
+const contextChangeCounts = new Map<string, number>();
+const lastKnownContexts = new Map<string, any>();
+const initializedContexts = new Set<string>();
+const contextValueSequence = new Map<string, Array<any>>();
+
 export const getChangedProps = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
   if (!fiber.alternate) return changes;
@@ -175,8 +186,33 @@ export const getChangedProps = (fiber: Fiber): Set<string> => {
   // Check top-level props
   for (const key in currentProps) {
     if (key === 'children') continue;
-    if (isDifferent(currentProps[key], previousProps[key])) {
+    const currentValue = currentProps[key];
+    const previousValue = previousProps[key];
+
+    // Handle initialization
+    if (!initializedProps.has(key)) {
+      initializedProps.add(key);
+      lastKnownProps.set(key, currentValue);
+      propsValueSequence.set(key, [currentValue]);
+      propsChangeCounts.set(key, 0);
+      continue;
+    }
+
+    if (isDifferent(currentValue, previousValue)) {
       changes.add(key);
+
+      const sequence = propsValueSequence.get(key) ?? [];
+      if (!sequence.includes(previousValue)) {
+        sequence.push(previousValue);
+      }
+      if (!sequence.includes(currentValue)) {
+        sequence.push(currentValue);
+      }
+
+      propsValueSequence.set(key, sequence);
+      const changeCount = sequence.length - 1;
+      propsChangeCounts.set(key, changeCount);
+      lastKnownProps.set(key, currentValue);
     }
   }
 
@@ -303,22 +339,28 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
     }
   }
 
-  console.log('Changes:', changes);
-  console.log('Current state:', currentState);
-  console.log('Previous state:', previousState);
-  console.log('Last known values:', Object.fromEntries(lastKnownValues));
-  console.log('Change counts:', Object.fromEntries(stateChangeCounts));
-  console.log('Value sequences:', Object.fromEntries(valueSequence));
-
   return changes;
 };
 
 // Reset tracking when switching components
 export const resetStateTracking = () => {
+  // State tracking
   stateChangeCounts.clear();
   lastKnownValues.clear();
   initializedStates.clear();
   valueSequence.clear();
+
+  // Props tracking
+  propsChangeCounts.clear();
+  lastKnownProps.clear();
+  initializedProps.clear();
+  propsValueSequence.clear();
+
+  // Context tracking
+  contextChangeCounts.clear();
+  lastKnownContexts.clear();
+  initializedContexts.clear();
+  contextValueSequence.clear();
 };
 
 // Get the count for a specific state
@@ -517,11 +559,9 @@ export const getAllFiberContexts = (fiber: Fiber): Map<string, ContextValue> => 
 
 export const getChangedContext = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
-
   if (!fiber.alternate) return changes;
 
   const currentContexts = getAllFiberContexts(fiber);
-  const _previousContexts = getAllFiberContexts(fiber.alternate);
 
   currentContexts.forEach((currentValue, contextType) => {
     const contextName = (typeof contextType === 'object' && contextType !== null)
@@ -531,6 +571,15 @@ export const getChangedContext = (fiber: Fiber): Set<string> => {
       (contextType as any)?.type?.name?.replace('Provider', '') ??
       'Unnamed'
       : contextType;
+
+    // Handle initialization
+    if (!initializedContexts.has(contextName)) {
+      initializedContexts.add(contextName);
+      lastKnownContexts.set(contextName, currentValue);
+      contextValueSequence.set(contextName, [currentValue]);
+      contextChangeCounts.set(contextName, 0);
+      return;
+    }
 
     // Find the provider in the fiber tree
     let searchFiber: Fiber | null = fiber;
@@ -551,6 +600,19 @@ export const getChangedContext = (fiber: Fiber): Set<string> => {
 
       if (!Object.is(currentProviderValue, alternateValue)) {
         changes.add(contextName);
+
+        const sequence = contextValueSequence.get(contextName) ?? [];
+        if (!sequence.includes(alternateValue)) {
+          sequence.push(alternateValue);
+        }
+        if (!sequence.includes(currentProviderValue)) {
+          sequence.push(currentProviderValue);
+        }
+
+        contextValueSequence.set(contextName, sequence);
+        const changeCount = sequence.length - 1;
+        contextChangeCounts.set(contextName, changeCount);
+        lastKnownContexts.set(contextName, currentProviderValue);
       }
     }
   });
@@ -678,4 +740,13 @@ export const getCurrentContext = (fiber: Fiber) => {
   });
 
   return contextObj;
+};
+
+// Add getters for props and context counts
+export const getPropsChangeCount = (name: string): number => {
+  return propsChangeCounts.get(name) ?? 0;
+};
+
+export const getContextChangeCount = (name: string): number => {
+  return contextChangeCounts.get(name) ?? 0;
 };
