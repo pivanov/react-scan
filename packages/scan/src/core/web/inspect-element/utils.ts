@@ -293,6 +293,30 @@ const stateChangeCounts = new Map<string, number>();
 const lastKnownValues = new Map<string, any>();
 const initializedStates = new Set<string>();
 const valueSequence = new Map<string, Array<any>>();
+const forcedChanges = new Set<string>();
+const recentChanges = new Map<string, number>();
+
+// Reset tracking for a specific state key and force change detection
+export const resetStateKeyTracking = (key: string, currentValue: any) => {
+  // Get existing sequence and count
+  const sequence = valueSequence.get(key) ?? [];
+  const currentCount = stateChangeCounts.get(key) ?? 0;
+
+  // Add new value to sequence if it's different from the last one
+  const lastValue = sequence[sequence.length - 1];
+  if (!Object.is(currentValue, lastValue)) {
+    sequence.push(currentValue);
+    valueSequence.set(key, sequence);
+    stateChangeCounts.set(key, currentCount + 1);
+  }
+
+  // Update last known value
+  lastKnownValues.set(key, currentValue);
+
+  // Mark as forced change
+  forcedChanges.add(key);
+  recentChanges.set(key, Date.now());
+};
 
 export const getChangedState = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
@@ -300,11 +324,20 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
 
   const currentState = getStateFromFiber(fiber);
   const previousState = getStateFromFiber(fiber.alternate);
+  const now = Date.now();
+
+  // Clean up old recent changes (older than 500ms)
+  for (const [key, timestamp] of recentChanges.entries()) {
+    if (now - timestamp > 500) {
+      recentChanges.delete(key);
+    }
+  }
 
   // Compare current state with previous state
   for (const key in currentState) {
     const currentValue = currentState[key];
     const previousValue = previousState[key];
+    const lastKnownValue = lastKnownValues.get(key);
 
     // Handle initialization
     if (!initializedStates.has(key)) {
@@ -315,9 +348,13 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
       continue; // Skip counting initial values as changes
     }
 
-    // Check if the value has actually changed from the previous render
-    if (!Object.is(currentValue, previousValue)) {
+    // Check if the value has changed, is a forced change, or is a recent change
+    if (!Object.is(currentValue, previousValue) ||
+      !Object.is(currentValue, lastKnownValue) ||
+      forcedChanges.has(key) ||
+      recentChanges.has(key)) {
       changes.add(key);
+      forcedChanges.delete(key); // Clear the forced change flag
 
       // Get the sequence of values for this key
       const sequence = valueSequence.get(key) ?? [];
@@ -339,16 +376,25 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
     }
   }
 
+  console.log('Changes:', changes);
+  console.log('Current state:', currentState);
+  console.log('Previous state:', previousState);
+  console.log('Last known values:', Object.fromEntries(lastKnownValues));
+  console.log('Change counts:', Object.fromEntries(stateChangeCounts));
+  console.log('Value sequences:', Object.fromEntries(valueSequence));
+
   return changes;
 };
 
-// Reset tracking when switching components
+// Update resetStateTracking to also clear recent changes
 export const resetStateTracking = () => {
   // State tracking
   stateChangeCounts.clear();
   lastKnownValues.clear();
   initializedStates.clear();
   valueSequence.clear();
+  forcedChanges.clear();
+  recentChanges.clear();
 
   // Props tracking
   propsChangeCounts.clear();

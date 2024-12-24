@@ -16,6 +16,7 @@ import {
   getStateChangeCount,
   getPropsChangeCount,
   getContextChangeCount,
+  resetStateKeyTracking,
 } from './utils';
 
 const EXPANDED_PATHS = new Set<string>();
@@ -655,12 +656,6 @@ export const createPropertyElement = (
                       overrideProps(fiber, [key], convertedValue);
                     }
                   } else if (section === 'state' && overrideHookState) {
-                    // Reset tracking data before any state update
-                    Store.reportData.delete(fiber);
-                    if (fiber.alternate) {
-                      Store.reportData.delete(fiber.alternate);
-                    }
-
                     // Handle primitive state values (no path) differently
                     if (!parentPath) {
                       const stateNames = getStateNames(fiber);
@@ -668,6 +663,9 @@ export const createPropertyElement = (
                       const hookId = namedStateIndex !== -1 ?
                         namedStateIndex.toString() :
                         '0';
+
+                      // Reset tracking for this state key with new value
+                      resetStateKeyTracking(key, convertedValue);
 
                       // Update the primitive state value directly
                       overrideHookState(fiber, hookId, [], convertedValue);
@@ -681,6 +679,9 @@ export const createPropertyElement = (
 
                     const statePath = fullPathParts.slice(stateIndex + 1);
                     const baseStateKey = statePath[0];
+
+                    // Reset tracking for the base state key with new value
+                    resetStateKeyTracking(baseStateKey, convertedValue);
 
                     const stateNames = getStateNames(fiber);
                     const namedStateIndex = stateNames.indexOf(baseStateKey);
