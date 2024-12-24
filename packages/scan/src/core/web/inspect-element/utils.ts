@@ -157,29 +157,20 @@ export const getChangedPropsDetailed = (fiber: Fiber): Array<PropChange> => {
   return changes;
 };
 
+const isDifferent = (a: any, b: any): boolean => {
+  // Quick reference check
+  if (a === b) return false;
+
+  // For primitives
+  return !Object.is(a, b);
+};
+
 export const getChangedProps = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
   if (!fiber.alternate) return changes;
 
   const previousProps = fiber.alternate.memoizedProps || {};
   const currentProps = fiber.memoizedProps || {};
-
-  const isDifferent = (a: any, b: any): boolean => {
-    // Quick reference check
-    if (a === b) return false;
-
-    // Handle functions
-    if (typeof a === 'function') return true;
-
-    // For objects, only check if reference changed at top level
-    if (typeof a === 'object' && a !== null) {
-      // Don't do deep comparison, just check if reference changed
-      return true;
-    }
-
-    // For primitives
-    return !Object.is(a, b);
-  };
 
   // Check top-level props
   for (const key in currentProps) {
@@ -261,37 +252,78 @@ export const getStateFromFiber = (fiber: Fiber | null) => {
   return {};
 };
 
+// Track state change counts and initialization status
+const stateChangeCounts = new Map<string, number>();
+const lastKnownValues = new Map<string, any>();
+const initializedStates = new Set<string>();
+const valueSequence = new Map<string, Array<any>>();
+
 export const getChangedState = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
   if (!fiber.alternate) return changes;
 
-  const previousFiber = fiber.alternate;
-  if (fiber.tag === FunctionComponentTag ||
-    fiber.tag === SimpleMemoComponentTag ||
-    fiber.tag === MemoComponentTag) {
+  const currentState = getStateFromFiber(fiber);
+  const previousState = getStateFromFiber(fiber.alternate);
 
-    let currentState = fiber.memoizedState;
-    let previousState = previousFiber.memoizedState;
-    let index = 0;
-    const stateNames = getStateNames(fiber);
+  // Compare current state with previous state
+  for (const key in currentState) {
+    const currentValue = currentState[key];
+    const previousValue = previousState[key];
 
-    while (currentState && previousState) {
-      if (currentState.queue && currentState.memoizedState !== undefined) {
-        const name = stateNames[index] ?? `state${index}`;
-        const hasValueChange = !Object.is(
-          currentState.memoizedState,
-          previousState.memoizedState
-        );
-        if (hasValueChange) {
-          changes.add(name);
-        }
-        index++;
+    // Handle initialization
+    if (!initializedStates.has(key)) {
+      initializedStates.add(key);
+      lastKnownValues.set(key, currentValue);
+      valueSequence.set(key, [currentValue]);
+      stateChangeCounts.set(key, 0);
+      continue; // Skip counting initial values as changes
+    }
+
+    // Check if the value has actually changed from the previous render
+    if (!Object.is(currentValue, previousValue)) {
+      changes.add(key);
+
+      // Get the sequence of values for this key
+      const sequence = valueSequence.get(key) ?? [];
+
+      // Add both previous and current values if they're new
+      if (!sequence.includes(previousValue)) {
+        sequence.push(previousValue);
       }
-      currentState = currentState.next;
-      previousState = previousState.next;
+      if (!sequence.includes(currentValue)) {
+        sequence.push(currentValue);
+      }
+
+      valueSequence.set(key, sequence);
+
+      // Update change count - subtract 1 because first value is initial state
+      const changeCount = sequence.length - 1;
+      stateChangeCounts.set(key, changeCount);
+      lastKnownValues.set(key, currentValue);
     }
   }
+
+  console.log('Changes:', changes);
+  console.log('Current state:', currentState);
+  console.log('Previous state:', previousState);
+  console.log('Last known values:', Object.fromEntries(lastKnownValues));
+  console.log('Change counts:', Object.fromEntries(stateChangeCounts));
+  console.log('Value sequences:', Object.fromEntries(valueSequence));
+
   return changes;
+};
+
+// Reset tracking when switching components
+export const resetStateTracking = () => {
+  stateChangeCounts.clear();
+  lastKnownValues.clear();
+  initializedStates.clear();
+  valueSequence.clear();
+};
+
+// Get the count for a specific state
+export const getStateChangeCount = (name: string): number => {
+  return stateChangeCounts.get(name) ?? 0;
 };
 
 const isFiberInTree = (fiber: Fiber, root: Fiber): boolean => {

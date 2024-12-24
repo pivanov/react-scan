@@ -12,6 +12,8 @@ import {
   getCurrentContext,
   getCurrentProps,
   getCurrentState,
+  resetStateTracking,
+  getStateChangeCount,
 } from './utils';
 
 const EXPANDED_PATHS = new Set<string>();
@@ -117,6 +119,7 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     // Clear all tracking
     stateChanges.counts.clear();
     stateChanges.lastValues.clear();
+    resetStateTracking();
   }
   lastInspectedFiber = fiber;
 
@@ -138,16 +141,18 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   let hasAnyChanges = false;
 
   // Show state changes in yellow section
+  console.log('!@#!@#!@#', changedState.size)
   if (changedState.size > 0) {
     const stateHeader = templates.header();
     stateHeader.textContent = 'State:';
     const stateList = templates.changeList();
 
     changedState.forEach(key => {
-      if (renderCount > 0) {
+      const count = getStateChangeCount(key);
+      if (count > 0) {  // Only show if there are actual changes
         hasAnyChanges = true;
         const li = templates.listItem();
-        li.textContent = `${key} ×${renderCount}`;
+        li.textContent = `${key} ×${count}`;
         stateList.appendChild(li);
       }
     });
@@ -165,7 +170,6 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
     const propsList = templates.changeList();
 
     changedProps.forEach(key => {
-      // Only show props that actually changed (not 0)
       if (renderCount > 0) {
         hasAnyChanges = true;
         const li = templates.listItem();
@@ -662,28 +666,30 @@ export const createPropertyElement = (
                       overrideProps(fiber, [key], convertedValue);
                     }
                   } else if (section === 'state' && overrideHookState) {
+                    // Reset tracking data before any state update
+                    Store.reportData.delete(fiber);
+                    if (fiber.alternate) {
+                      Store.reportData.delete(fiber.alternate);
+                    }
+
                     // Handle primitive state values (no path) differently
                     if (!parentPath) {
-                    // Get the hook ID for this state key
                       const stateNames = getStateNames(fiber);
                       const namedStateIndex = stateNames.indexOf(key);
                       const hookId = namedStateIndex !== -1 ?
                         namedStateIndex.toString() :
-                        '0'; // Default to first hook if not found
+                        '0';
 
                       // Update the primitive state value directly
                       overrideHookState(fiber, hookId, [], convertedValue);
                       return;
                     }
 
-                    // For nested state updates, continue with the existing logic
+                    // For nested state updates
                     const fullPathParts = parentPath.split('.');
                     const stateIndex = fullPathParts.indexOf('state');
-                    if (stateIndex === -1) {
-                      return;
-                    }
+                    if (stateIndex === -1) return;
 
-                    // Rest of the existing nested state update logic...
                     const statePath = fullPathParts.slice(stateIndex + 1);
                     const baseStateKey = statePath[0];
 
@@ -708,7 +714,7 @@ export const createPropertyElement = (
                   if (input.parentNode) {
                     input.replaceWith(valueElement);
                   }
-                }, 0);
+                }, 32);
 
               } catch (error) {
                 if (input.parentNode) {

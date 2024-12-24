@@ -391,8 +391,8 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
 
   // Create single shared object for both fibers
   const fiberData: RenderData = {
-    count: existingCount + renders.length,  // No need for Number() since length is always a number
-    time: selfTime || 0,  // selfTime is already a number from getTimings
+    count: existingCount + renders.length,
+    time: selfTime || 0,
     renders,
     displayName,
     type: getType(fiber.type) || null
