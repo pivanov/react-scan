@@ -148,55 +148,68 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   let hasAnyChanges = false;
 
   // Show state changes in yellow section
-  if (changedState.size > 0) {
-    const stateHeader = templates.header();
-    stateHeader.textContent = 'State:';
-    const stateList = templates.changeList();
+  const stateHeader = templates.header();
+  stateHeader.textContent = 'State:';
+  const stateList = templates.changeList();
+  let hasStateChanges = false;
 
-    changedState.forEach(key => {
-      const count = getStateChangeCount(key);
-      hasAnyChanges = true;  // Always show changes if we have changed state
+  changedState.forEach(key => {
+    const count = getStateChangeCount(key);
+    if (count > 0) {
+      hasStateChanges = true;
+      hasAnyChanges = true;
       const li = templates.listItem();
       li.textContent = `${key} ×${count}`;
       stateList.appendChild(li);
-    });
+    }
+  });
 
+  if (hasStateChanges) {
     whatChangedSection.appendChild(stateHeader);
     whatChangedSection.appendChild(stateList);
   }
 
   // Show props changes in yellow section
-  if (changedProps.size > 0) {
-    const propsHeader = templates.header();
-    propsHeader.textContent = 'Props:';
-    const propsList = templates.changeList();
+  const propsHeader = templates.header();
+  propsHeader.textContent = 'Props:';
+  const propsList = templates.changeList();
+  let hasPropsChanges = false;
 
-    changedProps.forEach(key => {
-      const count = getPropsChangeCount(key);
-      hasAnyChanges = true;  // Always show changes if we have changed props
+  changedProps.forEach(key => {
+    const count = getPropsChangeCount(key);
+    if (count > 0) {
+      hasPropsChanges = true;
+      hasAnyChanges = true;
       const li = templates.listItem();
       li.textContent = `${key} ×${count}`;
       propsList.appendChild(li);
-    });
+    }
+  });
 
+  if (hasPropsChanges) {
     whatChangedSection.appendChild(propsHeader);
     whatChangedSection.appendChild(propsList);
   }
 
   // Show context changes in yellow section
-  if (changedContext.size > 0) {
-    const contextHeader = templates.header();
-    contextHeader.textContent = 'Context:';
-    const contextList = templates.changeList();
+  const contextHeader = templates.header();
+  contextHeader.textContent = 'Context:';
+  const contextList = templates.changeList();
+  let hasContextChanges = false;
 
-    changedContext.forEach(key => {
-      const count = getContextChangeCount(key);
-      hasAnyChanges = true;  // Always show changes if we have changed context
+  // Track both current changes and accumulated changes
+  changedContext.forEach(key => {
+    const count = getContextChangeCount(key);
+    if (count > 0) {
+      hasContextChanges = true;
+      hasAnyChanges = true;
       const li = templates.listItem();
       li.textContent = `${key.replace('context.', '')} ×${count}`;
       contextList.appendChild(li);
-    });
+    }
+  });
 
+  if (hasContextChanges) {
     whatChangedSection.appendChild(contextHeader);
     whatChangedSection.appendChild(contextList);
   }

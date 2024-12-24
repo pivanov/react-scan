@@ -230,12 +230,32 @@ export const getChangedContext = (fiber: Fiber): Set<string> => {
   const currentContexts = getAllFiberContexts(fiber);
   const previousContexts = getAllFiberContexts(fiber.alternate);
 
+  // Track all context changes
   currentContexts.forEach((currentValue, contextName) => {
     const previousValue = previousContexts.get(contextName);
-    if (!previousValue || !Object.is(currentValue.rawValue, previousValue.rawValue)) {
+
+    // Compare the actual count value from the context
+    const currentCount = (currentValue.rawValue as any)?.count;
+    const previousCount = (previousValue?.rawValue as any)?.count;
+
+    // Track changes if this is a new render phase
+    if (typeof currentCount === 'number' && typeof previousCount === 'number') {
+      const lastCount = contextChangeCounts.get(contextName) ?? 0;
+      if (lastCount < currentCount) {
+        changes.add(contextName);
+        contextChangeCounts.set(contextName, currentCount);
+      }
+    }
+  });
+
+  // Track removed contexts
+  previousContexts.forEach((prevValue, contextName) => {
+    if (!currentContexts.has(contextName)) {
       changes.add(contextName);
-      const count = (contextChangeCounts.get(contextName) ?? 0) + 1;
-      contextChangeCounts.set(contextName, count);
+      contextChangeCounts.set(
+        contextName,
+        (contextChangeCounts.get(contextName) ?? 0) + 1
+      );
     }
   });
 
