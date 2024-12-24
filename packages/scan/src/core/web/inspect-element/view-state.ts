@@ -668,6 +668,9 @@ export const createPropertyElement = (
 
                       // Update the primitive state value directly
                       overrideHookState(fiber, hookId, [], convertedValue);
+
+                      // Force a re-render to update the yellow box
+                      Store.lastReportTime.value = Date.now();
                       return;
                     }
 
@@ -691,6 +694,9 @@ export const createPropertyElement = (
                     nestedPath.push(key);
 
                     overrideHookState(fiber, hookId, nestedPath, convertedValue);
+
+                    // Force a re-render to update the yellow box
+                    Store.lastReportTime.value = Date.now();
                   }
                 }, null);
 

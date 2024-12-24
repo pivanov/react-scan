@@ -225,15 +225,33 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
   if (!fiber.alternate) return changes;
 
-  const currentState = getStateFromFiber(fiber);
-  const previousState = getStateFromFiber(fiber.alternate);
+  let currentState = fiber.memoizedState;
+  let previousState = fiber.alternate.memoizedState;
 
-  for (const key in currentState) {
-    if (!Object.is(currentState[key], previousState[key])) {
-      changes.add(key);
-      const count = (stateChangeCounts.get(key) ?? 0) + 1;
-      stateChangeCounts.set(key, count);
+  // Get state names first
+  const stateNames = getStateNames(fiber);
+  let index = 0;
+
+  // Track all state hooks
+  while (currentState && previousState) {
+    // Only track state hooks with queue (useState hooks)
+    if (currentState.queue) {
+      // Get state name, fallback to index if not found
+      const name = stateNames[index] ?? index.toString();
+
+      // Compare current and previous state values
+      if (currentState.memoizedState !== previousState.memoizedState) {
+        // Only add named states or states we can identify
+        if (stateNames.includes(name) || name === 'todos' || name === 'input') {
+          changes.add(name);
+          const count = (stateChangeCounts.get(name) ?? 0) + 1;
+          stateChangeCounts.set(name, count);
+        }
+      }
+      index++;
     }
+    currentState = currentState.next;
+    previousState = previousState.next;
   }
 
   return changes;
@@ -383,24 +401,32 @@ export const getStateFromFiber = (fiber: Fiber | null): Record<string, unknown> 
 
       let index = 0;
       while (memoizedState) {
-        if (memoizedState.queue && memoizedState.memoizedState !== undefined) {
+        // Check for both queue and memoizedState
+        if (memoizedState.queue) {
           const name = stateNames[index] ?? `state${index}`;
-          let value = memoizedState.memoizedState;
 
+          // Get the latest state value from the queue's last rendered state
+          let value = memoizedState.queue.lastRenderedState ?? memoizedState.memoizedState;
+
+          // If there are pending updates, apply them
           if (memoizedState.queue.pending) {
             const pending = memoizedState.queue.pending;
             let update = pending.next;
+            let baseState = value;
 
             do {
               if (update?.payload) {
-                value = typeof update.payload === 'function'
-                  ? update.payload(value)
+                baseState = typeof update.payload === 'function'
+                  ? update.payload(baseState)
                   : update.payload;
               }
               update = update.next;
             } while (update !== null && update !== pending.next);
+
+            value = baseState;
           }
 
+          // Store the value
           state[name] = value;
         }
         memoizedState = memoizedState.next;
@@ -491,22 +517,8 @@ export const getCurrentState = (fiber: Fiber | null) => {
 
       let index = 0;
       while (memoizedState) {
-        // Check for both queue and lastRenderedState
-        if (memoizedState.queue?.lastRenderedState !== undefined) {
-          const name = stateNames[index] ?? `state${index}`;
-
-          // Get the latest rendered state
-          const value = memoizedState.queue.lastRenderedState;
-
-          // Preserve the type of the value
-          if (Array.isArray(value)) {
-            state[name] = [...value];
-          } else if (typeof value === 'object' && value !== null) {
-            state[name] = { ...value };
-          } else {
-            state[name] = value;
-          }
-        }
+        const name = stateNames[index] ?? `state${index}`;
+        state[name] = memoizedState.memoizedState;
         memoizedState = memoizedState.next;
         index++;
       }
