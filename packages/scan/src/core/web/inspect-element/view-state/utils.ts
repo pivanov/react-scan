@@ -34,12 +34,14 @@ interface ReactContext<T = unknown> {
 const stateChangeCounts = new Map<string, number>();
 const propsChangeCounts = new Map<string, number>();
 const contextChangeCounts = new Map<string, number>();
+const lastRendered = new Map<string, unknown>();
 
 // Reset all tracking
 export const resetStateTracking = (): void => {
   stateChangeCounts.clear();
   propsChangeCounts.clear();
   contextChangeCounts.clear();
+  lastRendered.clear();
 };
 
 // Simple change detection for props
@@ -117,6 +119,9 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
   let previousState = fiber.alternate.memoizedState;
   const stateNames = getStateNames(fiber);
 
+  // Track primitive changes separately
+  let primitiveChangeCount = 0;
+
   // Only track actual state hooks (with queue)
   let index = 0;
   while (currentState && previousState) {
@@ -124,21 +129,47 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
       const currentValue = currentState.memoizedState;
       const previousValue = previousState.memoizedState;
       const hasPendingUpdates = currentState.queue.pending !== null;
+      const name = stateNames[index] ?? `state${index}`;
 
-      // Track changes if value is different or there are pending updates
-      if (hasPendingUpdates || !Object.is(currentValue, previousValue)) {
-        const name = stateNames[index] ?? `state${index}`;
+      // Always track initial state value
+      const isInitialChange = !lastRendered.has(`${fiber.type?.name}_${name}`);
+      if (isInitialChange) {
+        lastRendered.set(`${fiber.type?.name}_${name}`, currentValue);
         changes.add(name);
         const count = (stateChangeCounts.get(name) ?? 0) + 1;
         stateChangeCounts.set(name, count);
       }
+      // Track changes if value is different or there are pending updates
+      else if (hasPendingUpdates || !Object.is(currentValue, previousValue)) {
+        changes.add(name);
+        lastRendered.set(`${fiber.type?.name}_${name}`, currentValue);
+
+        // Only increment count for primitive values or when there are pending updates
+        if (hasPendingUpdates ||
+          !(typeof currentValue === 'function' ||
+            (typeof currentValue === 'object' && currentValue !== null))) {
+          primitiveChangeCount++;
+          const count = (stateChangeCounts.get(name) ?? 0) + 1;
+          stateChangeCounts.set(name, count);
+        }
+      }
+
+      // If we had primitive changes, also track non-primitive state values
+      if (primitiveChangeCount > 0 &&
+        (typeof currentValue === 'function' ||
+          (typeof currentValue === 'object' && currentValue !== null))) {
+        changes.add(name);
+        const count = (stateChangeCounts.get(name) ?? 0) + primitiveChangeCount;
+        stateChangeCounts.set(name, count);
+      }
+
       index++;
     }
     currentState = currentState.next;
     previousState = previousState.next;
   }
 
-  // Also check for new or deleted state hooks
+  // Also check for new state hooks
   while (currentState) {
     if (currentState.queue) {
       const name = stateNames[index] ?? `state${index}`;
@@ -150,6 +181,7 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
     currentState = currentState.next;
   }
 
+  // Also check for deleted state hooks
   while (previousState) {
     if (previousState.queue) {
       const name = stateNames[index] ?? `state${index}`;
@@ -328,65 +360,6 @@ export const getPropsOrder = (fiber: Fiber): Array<string> => {
     .filter(Boolean);
 };
 
-export const getStateFromFiber = (fiber: Fiber | null): Record<string, unknown> => {
-  if (!fiber) return {};
-
-  try {
-    if (
-      fiber.tag === FunctionComponentTag ||
-      fiber.tag === ForwardRefTag ||
-      fiber.tag === SimpleMemoComponentTag ||
-      fiber.tag === MemoComponentTag
-    ) {
-      let memoizedState = fiber.memoizedState;
-      const state: Record<string, unknown> = {};
-      const stateNames = getStateNames(fiber);
-
-      let index = 0;
-      while (memoizedState) {
-        // Check for both queue and memoizedState
-        if (memoizedState.queue) {
-          const name = stateNames[index] ?? `state${index}`;
-
-          // Get the latest state value from the queue's last rendered state
-          let value = memoizedState.queue.lastRenderedState ?? memoizedState.memoizedState;
-
-          // If there are pending updates, apply them
-          if (memoizedState.queue.pending) {
-            const pending = memoizedState.queue.pending;
-            let update = pending.next;
-            let baseState = value;
-
-            do {
-              if (update?.payload) {
-                baseState = typeof update.payload === 'function'
-                  ? update.payload(baseState)
-                  : update.payload;
-              }
-              update = update.next;
-            } while (update !== null && update !== pending.next);
-
-            value = baseState;
-          }
-
-          // Store the value
-          state[name] = value;
-        }
-        memoizedState = memoizedState.next;
-        index++;
-      }
-      return state;
-    }
-  } catch {
-    /* Silently fail */
-  }
-  return {};
-};
-
-export const getCurrentProps = (fiber: Fiber): Record<string, unknown> => {
-  return fiber.memoizedProps ?? {};
-};
-
 export const getCurrentState = (fiber: Fiber | null) => {
   if (!fiber) return {};
 
@@ -406,7 +379,48 @@ export const getCurrentState = (fiber: Fiber | null) => {
         // Only track state hooks with queue
         if (memoizedState.queue) {
           const name = stateNames[index] ?? `state${index}`;
-          const value = memoizedState.memoizedState;
+
+          // Get the latest value by applying all updates
+          let value = memoizedState.memoizedState;
+
+          // First check the pending queue
+          if (memoizedState.queue.pending) {
+            const pending = memoizedState.queue.pending;
+            let update = pending.next;
+
+            // Apply all pending updates
+            do {
+              if (update?.payload) {
+                value = typeof update.payload === 'function'
+                  ? update.payload(value)
+                  : update.payload;
+              }
+              update = update.next;
+            } while (update !== null && update !== pending.next);
+          }
+
+          // Then check the base queue (for concurrent updates)
+          if (memoizedState.queue.baseQueue) {
+            let update = memoizedState.queue.baseQueue;
+            let newValue = value;
+
+            do {
+              if (update?.payload) {
+                newValue = typeof update.payload === 'function'
+                  ? update.payload(newValue)
+                  : update.payload;
+              }
+              update = update.next;
+            } while (update !== null && update !== memoizedState.queue.baseQueue);
+
+            value = newValue;
+          }
+
+          // Finally, check if there's a more recent value in lastRenderedState
+          if (memoizedState.queue.lastRenderedState !== undefined &&
+            !Object.is(memoizedState.queue.lastRenderedState, value)) {
+            value = memoizedState.queue.lastRenderedState;
+          }
 
           // Preserve the type of the value
           if (Array.isArray(value)) {
@@ -427,4 +441,8 @@ export const getCurrentState = (fiber: Fiber | null) => {
     /* Silently fail */
   }
   return {};
+};
+
+export const getCurrentProps = (fiber: Fiber): Record<string, unknown> => {
+  return fiber.memoizedProps ?? {};
 };

@@ -6,7 +6,6 @@ import {
   getChangedProps,
   getChangedState,
   getChangedContext,
-  getStateFromFiber,
   getStateNames,
   getCurrentContext,
   getCurrentProps,
@@ -327,7 +326,7 @@ export const replayComponent = async (fiber: any) => {
     }
 
     try {
-      const state = getStateFromFiber(fiber) || {};
+      const state = getCurrentState(fiber) || {};
       Object.keys(state).forEach((key) => {
         overrideHookState(fiber, key, [], state[key]);
       });

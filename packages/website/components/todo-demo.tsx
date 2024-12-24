@@ -92,8 +92,8 @@ function TodoItem({ todo, onDelete, obj }: {
 }
 
 export default function TodoDemo({ closeAction, pivanov }: { closeAction: () => void, pivanov: string }) {
-  const [todos, setTodos] = useState<Array<Todo>>([]);
   const [input, setInput] = useState('');
+  const [todos, setTodos] = useState<Array<Todo>>([]);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
