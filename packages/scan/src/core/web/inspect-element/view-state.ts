@@ -103,9 +103,6 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propContainer = Store.inspectState.value.propContainer;
   if (!propContainer) return;
 
-  // eslint-disable-next-line no-console
-  console.log('renderPropsAndState', didRender);
-
   const componentName = fiber.type?.displayName || fiber.type?.name || 'Unknown';
 
   // Reset tracking only when switching to a different component type
@@ -635,6 +632,10 @@ export const createPropertyElement = (
               : value.toString();
 
             const updateValue = () => {
+              // Trigger flash overlay for the edited value
+              const currentPath = getPath(componentName, section, parentPath, key);
+              changedAt.set(currentPath, Date.now());
+
               try {
                 const newValue = input.value;
                 const convertedValue =
@@ -691,6 +692,11 @@ export const createPropertyElement = (
                     overrideHookState(fiber, hookId, nestedPath, convertedValue);
                   }
                 }
+
+                if (container.parentNode) {
+                  createAndHandleFlashOverlay(container.parentNode as HTMLElement);
+                }
+
               } catch (error) {
                 if (input.parentNode) {
                   input.replaceWith(valueElement);
