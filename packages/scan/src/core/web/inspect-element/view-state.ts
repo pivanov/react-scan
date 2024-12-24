@@ -440,10 +440,16 @@ export const createPropertyElement = (
 
     lastRendered.set(currentPath, value);
 
-    if (isBadRender) {
+    if (shouldShowChange) {
       changedAt.set(currentPath, Date.now());
-      if (container.parentNode) {
-        createAndHandleFlashOverlay(container);
+      createAndHandleFlashOverlay(container);
+
+      // Also flash parent container if this is a nested value
+      if (level > 0 && container.parentElement) {
+        const parentContainer = container.closest('.react-scan-property')?.parentElement?.closest('.react-scan-property');
+        if (parentContainer instanceof HTMLElement) {
+          createAndHandleFlashOverlay(parentContainer);
+        }
       }
     }
 
@@ -504,14 +510,12 @@ export const createPropertyElement = (
               item,
               section,
               level + 1,
-              changedKeys,
+              new Set(),
               currentPath,
-              objectPathMap,
-              hasCumulativeChanges,
+              new WeakMap(),
+              false
             );
-            if (!el) {
-              return;
-            }
+            if (!el) return;
             content.appendChild(el);
           });
         } else {
@@ -525,14 +529,12 @@ export const createPropertyElement = (
               v,
               section,
               level + 1,
-              changedKeys,
+              new Set(),
               currentPath,
-              objectPathMap,
-              hasCumulativeChanges,
+              new WeakMap(),
+              false
             );
-            if (!el) {
-              return;
-            }
+            if (!el) return;
             content.appendChild(el);
           });
         }
@@ -541,9 +543,7 @@ export const createPropertyElement = (
       arrow.addEventListener('click', (e) => {
         e.stopPropagation();
 
-        const isExpanding = !container.classList.contains(
-          'react-scan-expanded',
-        );
+        const isExpanding = !container.classList.contains('react-scan-expanded');
 
         if (isExpanding) {
           EXPANDED_PATHS.add(currentPath);
@@ -562,14 +562,12 @@ export const createPropertyElement = (
                   item,
                   section,
                   level + 1,
-                  changedKeys,
+                  new Set(),
                   currentPath,
                   new WeakMap(),
-                  hasCumulativeChanges,
+                  false
                 );
-                if (!el) {
-                  return;
-                }
+                if (!el) return;
                 content.appendChild(el);
               });
             } else {
@@ -583,14 +581,12 @@ export const createPropertyElement = (
                   v,
                   section,
                   level + 1,
-                  changedKeys,
+                  new Set(),
                   currentPath,
                   new WeakMap(),
-                  hasCumulativeChanges,
+                  false
                 );
-                if (!el) {
-                  return;
-                }
+                if (!el) return;
                 content.appendChild(el);
               });
             }
@@ -637,10 +633,6 @@ export const createPropertyElement = (
               : value.toString();
 
             const updateValue = () => {
-              // Trigger flash overlay for the edited value
-              const currentPath = getPath(componentName, section, parentPath, key);
-              changedAt.set(currentPath, Date.now());
-
               try {
                 const newValue = input.value;
                 const convertedValue =
@@ -698,8 +690,23 @@ export const createPropertyElement = (
                   }
                 }
 
-                if (container.parentNode) {
-                  createAndHandleFlashOverlay(container.parentNode as HTMLElement);
+                // Trigger flash overlay for the edited value and its parent
+                const currentPath = getPath(componentName, section, parentPath, key);
+                changedAt.set(currentPath, Date.now());
+                createAndHandleFlashOverlay(container);
+
+                if (parentPath) {
+                  const parentParts = parentPath.split('.');
+                  const parentKey = parentParts[parentParts.length - 1];
+                  const grandParentPath = parentParts.slice(0, -1).join('.');
+                  const parentCurrentPath = getPath(componentName, section, grandParentPath, parentKey);
+                  changedAt.set(parentCurrentPath, Date.now());
+
+                  // Find and flash the parent container
+                  const parentContainer = container.closest('.react-scan-property')?.parentElement?.closest('.react-scan-property');
+                  if (parentContainer instanceof HTMLElement) {
+                    createAndHandleFlashOverlay(parentContainer);
+                  }
                 }
 
               } catch (error) {
