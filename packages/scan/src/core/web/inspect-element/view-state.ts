@@ -17,10 +17,37 @@ import {
   getContextChangeCount,
 } from './utils';
 
+// Types and Interfaces
+interface PropertyElementOptions {
+  componentName: string;
+  didRender: boolean;
+  propsContainer: HTMLDivElement;
+  fiber: Fiber;
+  key: string;
+  value: any;
+  section?: string;
+  level?: number;
+  changedKeys?: Set<string>;
+  parentPath?: string;
+  objectPathMap?: WeakMap<object, Set<string>>;
+  hasCumulativeChanges?: boolean;
+}
+
+export type CleanupFunction = () => void;
+export type PositionCallback = (element: HTMLElement) => void;
+
+// Constants
 const EXPANDED_PATHS = new Set<string>();
 const fadeOutTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 const activeOverlays = new Set<HTMLElement>();
+let lastInspectedFiber: Fiber | null = null;
+let changedAtInterval: ReturnType<typeof setInterval> | null = null;
 
+// State Maps
+export const changedAt = new Map<string, number>();
+const lastRendered = new Map<string, unknown>();
+
+// HTML Templates
 const templates = {
   whatChangedSection: createHTMLTemplate<HTMLDetailsElement>(
     `<details class="react-scan-what-changed" style="background-color:#b8860b;color:#ffff00;padding:5px">
@@ -94,9 +121,6 @@ const templates = {
     false
   )
 };
-
-// Track previous values to detect actual changes
-let lastInspectedFiber: Fiber | null = null;
 
 export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propContainer = Store.inspectState.value.propContainer;
@@ -311,11 +335,7 @@ export const replayComponent = async (fiber: any) => {
   }
 };
 
-export const changedAt = new Map<string, number>();
-const lastRendered = new Map<string, unknown>();
-
-let changedAtInterval: ReturnType<typeof setInterval> | null = null;
-
+// Utility Functions
 const tryOrElse = <T, E>(cb: () => T, val: E) => {
   try {
     return cb();
@@ -325,10 +345,76 @@ const tryOrElse = <T, E>(cb: () => T, val: E) => {
 };
 
 const isPromise = (value: any): value is Promise<unknown> => {
-  return (
-    value &&
-    (value instanceof Promise || (typeof value === 'object' && 'then' in value))
-  );
+  return value && (value instanceof Promise || (typeof value === 'object' && 'then' in value));
+};
+
+const getPath = (
+  componentName: string,
+  section: string,
+  parentPath: string,
+  key: string,
+): string => {
+  return parentPath
+    ? `${componentName}.${parentPath}.${key}`
+    : `${componentName}.${section}.${key}`;
+};
+
+const isEditableValue = (value: unknown): boolean => {
+  return typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean';
+};
+
+export const getValueClassName = (value: unknown): string => {
+  if (Array.isArray(value)) return 'react-scan-array';
+  if (value === null || value === undefined) return 'react-scan-null';
+  switch (typeof value) {
+    case 'string': return 'react-scan-string';
+    case 'number': return 'react-scan-number';
+    case 'boolean': return 'react-scan-boolean';
+    case 'object': return 'react-scan-object-key';
+    default: return '';
+  }
+};
+
+export const getValuePreview = (value: unknown): string => {
+  if (Array.isArray(value)) return `Array(${value.length})`;
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+
+  switch (typeof value) {
+    case 'string':
+      // Check if the string is already escaped
+      if (value.includes('&quot;') || value.includes('&#39;') ||
+        value.includes('&lt;') || value.includes('&gt;') ||
+        value.includes('&amp;')) {
+        return `"${value}"`;
+      }
+      // If not escaped, do the escaping
+      return `"${value.replace(/[<>&"'\\\n\r\t]/g, (char) => {
+        switch (char) {
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '&': return '&amp;';
+          case '"': return '&quot;';
+          case "'": return '&#39;';
+          case '\\': return '\\\\';
+          case '\n': return '\\n';
+          case '\r': return '\\r';
+          case '\t': return '\\t';
+          default: return char;
+        }
+      })}"`;
+    case 'number': return value.toString();
+    case 'boolean': return value.toString();
+    case 'object': {
+      if (value instanceof Promise) return 'Promise';
+      const keys = Object.keys(value);
+      if (keys.length <= 3) return `{${keys.join(', ')}}`;
+      return `{${keys.slice(0, 8).join(', ')}, ...}`;
+    }
+    default: return typeof value;
+  }
 };
 
 const renderSection = (
@@ -355,20 +441,20 @@ const renderSection = (
       ? fiber.alternate?.memoizedProps?.[key] ?? value
       : value;
 
-    const el = createPropertyElement(
+    const el = createPropertyElement({
       componentName,
       didRender,
-      propContainer,
+      propsContainer: propContainer,
       fiber,
       key,
-      displayValue,
-      title.toLowerCase(),
-      0,
-      isContextSection ? changedContext : changedKeys,
-      '',
-      new WeakMap(),
-      true
-    );
+      value: displayValue,
+      section: title.toLowerCase(),
+      level: 0,
+      changedKeys: isContextSection ? changedContext : changedKeys,
+      parentPath: '',
+      objectPathMap: new WeakMap(),
+      hasCumulativeChanges: true
+    });
 
     if (!el) return;
     section.appendChild(el);
@@ -377,37 +463,20 @@ const renderSection = (
   return section;
 };
 
-const getPath = (
-  componentName: string,
-  section: string,
-  parentPath: string,
-  key: string,
-): string => {
-  return parentPath
-    ? `${componentName}.${parentPath}.${key}`
-    : `${componentName}.${section}.${key}`;
-};
-
-const isEditableValue = (value: unknown): boolean => {
-  return typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean';
-};
-
-export const createPropertyElement = (
-  componentName: string,
-  didRender: boolean,
-  propsContainer: HTMLDivElement,
-  fiber: Fiber,
-  key: string,
-  value: any,
+export const createPropertyElement = ({
+  componentName,
+  didRender,
+  propsContainer,
+  fiber,
+  key,
+  value,
   section = '',
   level = 0,
   changedKeys = new Set<string>(),
   parentPath = '',
   objectPathMap = new WeakMap<object, Set<string>>(),
   hasCumulativeChanges = false,
-): HTMLElement | null => {
+}: PropertyElementOptions): HTMLElement | null => {
   try {
     if (!changedAtInterval) {
       changedAtInterval = setInterval(() => {
@@ -501,39 +570,39 @@ export const createPropertyElement = (
       if (isExpanded) {
         if (Array.isArray(value)) {
           value.forEach((item, index) => {
-            const el = createPropertyElement(
+            const el = createPropertyElement({
               componentName,
               didRender,
               propsContainer,
               fiber,
-              index.toString(),
-              item,
+              key: index.toString(),
+              value: item,
               section,
-              level + 1,
-              new Set(),
-              currentPath,
-              new WeakMap(),
-              false
-            );
+              level: level + 1,
+              changedKeys: new Set(),
+              parentPath: currentPath,
+              objectPathMap: new WeakMap(),
+              hasCumulativeChanges: false
+            });
             if (!el) return;
             content.appendChild(el);
           });
         } else {
           Object.entries(value).forEach(([k, v]) => {
-            const el = createPropertyElement(
+            const el = createPropertyElement({
               componentName,
               didRender,
               propsContainer,
               fiber,
-              k,
-              v,
+              key: k,
+              value: v,
               section,
-              level + 1,
-              new Set(),
-              currentPath,
-              new WeakMap(),
-              false
-            );
+              level: level + 1,
+              changedKeys: new Set(),
+              parentPath: currentPath,
+              objectPathMap: new WeakMap(),
+              hasCumulativeChanges: false
+            });
             if (!el) return;
             content.appendChild(el);
           });
@@ -553,39 +622,39 @@ export const createPropertyElement = (
           if (!content.hasChildNodes()) {
             if (Array.isArray(value)) {
               value.forEach((item, index) => {
-                const el = createPropertyElement(
+                const el = createPropertyElement({
                   componentName,
                   didRender,
                   propsContainer,
                   fiber,
-                  index.toString(),
-                  item,
+                  key: index.toString(),
+                  value: item,
                   section,
-                  level + 1,
-                  new Set(),
-                  currentPath,
-                  new WeakMap(),
-                  false
-                );
+                  level: level + 1,
+                  changedKeys: new Set(),
+                  parentPath: currentPath,
+                  objectPathMap: new WeakMap(),
+                  hasCumulativeChanges: false
+                });
                 if (!el) return;
                 content.appendChild(el);
               });
             } else {
               Object.entries(value).forEach(([k, v]) => {
-                const el = createPropertyElement(
+                const el = createPropertyElement({
                   componentName,
                   didRender,
                   propsContainer,
                   fiber,
-                  k,
-                  v,
+                  key: k,
+                  value: v,
                   section,
-                  level + 1,
-                  new Set(),
-                  currentPath,
-                  new WeakMap(),
-                  false
-                );
+                  level: level + 1,
+                  changedKeys: new Set(),
+                  parentPath: currentPath,
+                  objectPathMap: new WeakMap(),
+                  hasCumulativeChanges: false
+                });
                 if (!el) return;
                 content.appendChild(el);
               });
@@ -619,9 +688,6 @@ export const createPropertyElement = (
           valueElement.addEventListener('click', (e) => {
             e.stopPropagation();
 
-            // Reset tracking when starting to edit
-            resetStateTracking();
-
             const input = templates.input();
             input.value = typeof value === 'string' ?
               value.replace(/^"(?:.*)"$/, '$1')
@@ -640,6 +706,8 @@ export const createPropertyElement = (
                     typeof value === 'boolean' ? newValue === 'true' :
                       newValue;
 
+                // Reset tracking before applying new value
+                resetStateTracking();
                 value = convertedValue;
 
                 // First apply the state/prop update
@@ -709,6 +777,9 @@ export const createPropertyElement = (
                   }
                 }
 
+                // Re-render the yellow box to show the changes
+                renderPropsAndState(true, fiber);
+
               } catch (error) {
                 if (input.parentNode) {
                   input.replaceWith(valueElement);
@@ -756,105 +827,7 @@ const createCircularReferenceElement = (key: string): HTMLElement => {
   return container;
 };
 
-export const getValueClassName = (value: unknown): string => {
-  if (Array.isArray(value)) return 'react-scan-array';
-  if (value === null || value === undefined) return 'react-scan-null';
-  switch (typeof value) {
-    case 'string':
-      return 'react-scan-string';
-    case 'number':
-      return 'react-scan-number';
-    case 'boolean':
-      return 'react-scan-boolean';
-    case 'object':
-      return 'react-scan-object-key';
-    default:
-      return '';
-  }
-};
-
-export const getValuePreview = (value: unknown): string => {
-  if (Array.isArray(value)) {
-    return `Array(${value.length})`;
-  }
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  switch (typeof value) {
-    case 'string':
-      // Check if the string is already escaped
-      if (value.includes('&quot;') || value.includes('&#39;') ||
-        value.includes('&lt;') || value.includes('&gt;') ||
-        value.includes('&amp;')) {
-        return `"${value}"`;
-      }
-      // If not escaped, do the escaping
-      return `"${value.replace(/[<>&"'\\\n\r\t]/g, (char) => {
-        switch (char) {
-          case '<': return '&lt;';
-          case '>': return '&gt;';
-          case '&': return '&amp;';
-          case '"': return '&quot;';
-          case "'": return '&#39;';
-          case '\\': return '\\\\';
-          case '\n': return '\\n';
-          case '\r': return '\\r';
-          case '\t': return '\\t';
-          default: return char;
-        }
-      })}"`;
-    case 'number':
-      return value.toString();
-    case 'boolean':
-      return value.toString();
-    case 'object': {
-      if (value instanceof Promise) {
-        return 'Promise';
-      }
-      const keys = Object.keys(value);
-      if (keys.length <= 3) {
-        return `{${keys.join(', ')}}`;
-      }
-      return `{${keys.slice(0, 8).join(', ')}, ...}`;
-    }
-    default:
-      return typeof value;
-  }
-};
-
-export type CleanupFunction = () => void;
-export type PositionCallback = (element: HTMLElement) => void;
-
-export const cleanup = () => {
-  // Clear all expanded paths
-  EXPANDED_PATHS.clear();
-
-  // Clean up all active overlays and ensure proper garbage collection
-  activeOverlays.forEach(cleanupFlashOverlay);
-  activeOverlays.clear();
-
-  // Clear interval if it exists
-  if (changedAtInterval !== null) {
-    clearInterval(changedAtInterval);
-    changedAtInterval = null;
-  }
-
-  // Clear all timers from active overlays
-  activeOverlays.forEach((overlay) => {
-    const timer = fadeOutTimers.get(overlay);
-    if (timer) {
-      clearTimeout(timer);
-      fadeOutTimers.delete(overlay);
-    }
-  });
-
-  // Clear tracking maps
-  changedAt.clear();
-  lastRendered.clear();
-
-  // Reset last inspected fiber
-  lastInspectedFiber = null;
-};
-
+// Overlay Management
 const cleanupFlashOverlay = (overlay: HTMLElement) => {
   const timerId = fadeOutTimers.get(overlay);
   if (timerId !== undefined) {
@@ -912,4 +885,35 @@ const createAndHandleFlashOverlay = (container: HTMLElement) => {
 
     fadeOutTimers.set(flashOverlay, timerId);
   });
+};
+
+export const cleanup = () => {
+  // Clear all expanded paths
+  EXPANDED_PATHS.clear();
+
+  // Clean up all active overlays and ensure proper garbage collection
+  activeOverlays.forEach(cleanupFlashOverlay);
+  activeOverlays.clear();
+
+  // Clear interval if it exists
+  if (changedAtInterval !== null) {
+    clearInterval(changedAtInterval);
+    changedAtInterval = null;
+  }
+
+  // Clear all timers from active overlays
+  activeOverlays.forEach((overlay) => {
+    const timer = fadeOutTimers.get(overlay);
+    if (timer) {
+      clearTimeout(timer);
+      fadeOutTimers.delete(overlay);
+    }
+  });
+
+  // Clear tracking maps
+  changedAt.clear();
+  lastRendered.clear();
+
+  // Reset last inspected fiber
+  lastInspectedFiber = null;
 };
