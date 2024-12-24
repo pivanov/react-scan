@@ -225,37 +225,42 @@ export const getCurrentContext = (fiber: Fiber) => {
 // Simple change detection for context
 export const getChangedContext = (fiber: Fiber): Set<string> => {
   const changes = new Set<string>();
+
   if (!fiber.alternate) return changes;
 
   const currentContexts = getAllFiberContexts(fiber);
-  const previousContexts = getAllFiberContexts(fiber.alternate);
+  const _previousContexts = getAllFiberContexts(fiber.alternate);
 
-  // Track all context changes
-  currentContexts.forEach((currentValue, contextName) => {
-    const previousValue = previousContexts.get(contextName);
+  currentContexts.forEach((_currentValue, contextType) => {
+    const contextName = (typeof contextType === 'object' && contextType !== null)
+      ? (contextType as any)?.displayName ??
+      (contextType as any)?.Provider?.displayName ??
+      (contextType as any)?.Consumer?.displayName ??
+      (contextType as any)?.type?.name?.replace('Provider', '') ??
+      'Unnamed'
+      : contextType;
 
-    // Compare the actual count value from the context
-    const currentCount = (currentValue.rawValue as any)?.count;
-    const previousCount = (previousValue?.rawValue as any)?.count;
+    // Find the provider in the fiber tree
+    let searchFiber: Fiber | null = fiber;
+    let providerFiber: Fiber | null = null;
 
-    // Track changes if this is a new render phase
-    if (typeof currentCount === 'number' && typeof previousCount === 'number') {
-      const lastCount = contextChangeCounts.get(contextName) ?? 0;
-      if (lastCount < currentCount) {
-        changes.add(contextName);
-        contextChangeCounts.set(contextName, currentCount);
+    while (searchFiber) {
+      if (searchFiber.type?.Provider) {
+        providerFiber = searchFiber;
+        break;
       }
+      searchFiber = searchFiber.return;
     }
-  });
 
-  // Track removed contexts
-  previousContexts.forEach((prevValue, contextName) => {
-    if (!currentContexts.has(contextName)) {
-      changes.add(contextName);
-      contextChangeCounts.set(
-        contextName,
-        (contextChangeCounts.get(contextName) ?? 0) + 1
-      );
+    // Compare current and alternate values if provider is found
+    if (providerFiber && providerFiber.alternate) {
+      const currentProviderValue = providerFiber.memoizedProps?.value;
+      const alternateValue = providerFiber.alternate.memoizedProps?.value;
+
+      if (!Object.is(currentProviderValue, alternateValue)) {
+        changes.add(contextName);
+        contextChangeCounts.set(contextName, (contextChangeCounts.get(contextName) ?? 0) + 1);
+      }
     }
   });
 

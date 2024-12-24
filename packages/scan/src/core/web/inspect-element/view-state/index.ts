@@ -139,6 +139,10 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const changedState = getChangedState(fiber);
   const changedContext = getChangedContext(fiber);
 
+  // console.log('@@@ changedProps', changedProps);
+  // console.log('@@@ changedState', changedState);
+  // console.log('@@@ changedContext', changedContext);
+
   propContainer.innerHTML = '';
 
   // Create what changed section (yellow box)
