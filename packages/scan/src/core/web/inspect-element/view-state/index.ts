@@ -1,12 +1,12 @@
 import type { Fiber } from 'react-reconciler';
 import { createHTMLTemplate } from '@web-utils/html-template';
 import { Store } from 'src/core';
+import { getOverrideMethods } from '@web-inspect-element/utils';
 import {
   getChangedProps,
   getChangedState,
   getChangedContext,
   getStateFromFiber,
-  getOverrideMethods,
   getStateNames,
   getCurrentContext,
   getCurrentProps,
@@ -155,18 +155,14 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
     changedState.forEach(key => {
       const count = getStateChangeCount(key);
-      if (count > 0) {  // Only show if there are actual changes
-        hasAnyChanges = true;
-        const li = templates.listItem();
-        li.textContent = `${key} ×${count}`;
-        stateList.appendChild(li);
-      }
+      hasAnyChanges = true;  // Always show changes if we have changed state
+      const li = templates.listItem();
+      li.textContent = `${key} ×${count}`;
+      stateList.appendChild(li);
     });
 
-    if (hasAnyChanges) {
-      whatChangedSection.appendChild(stateHeader);
-      whatChangedSection.appendChild(stateList);
-    }
+    whatChangedSection.appendChild(stateHeader);
+    whatChangedSection.appendChild(stateList);
   }
 
   // Show props changes in yellow section
@@ -177,18 +173,14 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
     changedProps.forEach(key => {
       const count = getPropsChangeCount(key);
-      if (count > 0) {
-        hasAnyChanges = true;
-        const li = templates.listItem();
-        li.textContent = `${key} ×${count}`;
-        propsList.appendChild(li);
-      }
+      hasAnyChanges = true;  // Always show changes if we have changed props
+      const li = templates.listItem();
+      li.textContent = `${key} ×${count}`;
+      propsList.appendChild(li);
     });
 
-    if (hasAnyChanges) {
-      whatChangedSection.appendChild(propsHeader);
-      whatChangedSection.appendChild(propsList);
-    }
+    whatChangedSection.appendChild(propsHeader);
+    whatChangedSection.appendChild(propsList);
   }
 
   // Show context changes in yellow section
@@ -199,18 +191,14 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
 
     changedContext.forEach(key => {
       const count = getContextChangeCount(key);
-      if (count > 0) {
-        hasAnyChanges = true;
-        const li = templates.listItem();
-        li.textContent = `${key.replace('context.', '')} ×${count}`;
-        contextList.appendChild(li);
-      }
+      hasAnyChanges = true;  // Always show changes if we have changed context
+      const li = templates.listItem();
+      li.textContent = `${key.replace('context.', '')} ×${count}`;
+      contextList.appendChild(li);
     });
 
-    if (hasAnyChanges) {
-      whatChangedSection.appendChild(contextHeader);
-      whatChangedSection.appendChild(contextList);
-    }
+    whatChangedSection.appendChild(contextHeader);
+    whatChangedSection.appendChild(contextList);
   }
 
   // Add back the toggle listener
@@ -554,8 +542,8 @@ export const createPropertyElement = ({
       preview.innerHTML = `
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
-          value,
-        )} react-scan-value truncate">${getValuePreview(value)}</span>
+        value,
+      )} react-scan-value truncate">${getValuePreview(value)}</span>
       `;
 
       const content = templates.nestedObject();
@@ -673,8 +661,8 @@ export const createPropertyElement = ({
       preview.innerHTML = `
         ${isBadRender ? '<span class="react-scan-warning">⚠️</span>' : ''}
         <span class="react-scan-key">${key}:&nbsp;</span><span class="${getValueClassName(
-          value,
-        )} react-scan-value truncate">${getValuePreview(value)}</span>
+        value,
+      )} react-scan-value truncate">${getValuePreview(value)}</span>
       `;
       container.appendChild(preview);
 
