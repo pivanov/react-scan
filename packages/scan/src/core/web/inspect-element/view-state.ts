@@ -700,14 +700,6 @@ export const createPropertyElement = (
                   }
                 }, null);
 
-                // Then update UI in next frame
-                setTimeout(() => {
-                  valueElement.textContent = getValuePreview(value);
-                  if (input.parentNode) {
-                    input.replaceWith(valueElement);
-                  }
-                }, 32);
-
               } catch (error) {
                 if (input.parentNode) {
                   input.replaceWith(valueElement);

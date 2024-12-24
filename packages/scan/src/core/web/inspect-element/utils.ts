@@ -227,26 +227,17 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
 
   let currentState = fiber.memoizedState;
   let previousState = fiber.alternate.memoizedState;
-
-  // Get state names first
   const stateNames = getStateNames(fiber);
+
+  // Only track actual state hooks (with queue)
   let index = 0;
-
-  // Track all state hooks
   while (currentState && previousState) {
-    // Only track state hooks with queue (useState hooks)
     if (currentState.queue) {
-      // Get state name, fallback to index if not found
-      const name = stateNames[index] ?? index.toString();
-
-      // Compare current and previous state values
       if (currentState.memoizedState !== previousState.memoizedState) {
-        // Only add named states or states we can identify
-        if (stateNames.includes(name) || name === 'todos' || name === 'input') {
-          changes.add(name);
-          const count = (stateChangeCounts.get(name) ?? 0) + 1;
-          stateChangeCounts.set(name, count);
-        }
+        const name = stateNames[index] ?? `state${index}`;
+        changes.add(name);
+        const count = (stateChangeCounts.get(name) ?? 0) + 1;
+        stateChangeCounts.set(name, count);
       }
       index++;
     }
@@ -517,10 +508,22 @@ export const getCurrentState = (fiber: Fiber | null) => {
 
       let index = 0;
       while (memoizedState) {
-        const name = stateNames[index] ?? `state${index}`;
-        state[name] = memoizedState.memoizedState;
+        // Only track state hooks with queue
+        if (memoizedState.queue) {
+          const name = stateNames[index] ?? `state${index}`;
+          const value = memoizedState.memoizedState;
+
+          // Preserve the type of the value
+          if (Array.isArray(value)) {
+            state[name] = [...value];
+          } else if (typeof value === 'object' && value !== null) {
+            state[name] = { ...value };
+          } else {
+            state[name] = value;
+          }
+          index++;
+        }
         memoizedState = memoizedState.next;
-        index++;
       }
 
       return state;
