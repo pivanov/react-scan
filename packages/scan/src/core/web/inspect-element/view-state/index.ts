@@ -15,6 +15,7 @@ import {
   getStateChangeCount,
   getPropsChangeCount,
   getContextChangeCount,
+  getPropsOrder,
 } from './utils';
 
 // Types and Interfaces
@@ -139,7 +140,7 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const changedState = getChangedState(fiber);
   const changedContext = getChangedContext(fiber);
 
-  // console.log('@@@ changedProps', changedProps);
+  console.log('@@@ changedProps', changedProps);
   // console.log('@@@ changedState', changedState);
   // console.log('@@@ changedContext', changedContext);
 
@@ -179,7 +180,15 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const propsList = templates.changeList();
   let hasPropsChanges = false;
 
-  changedProps.forEach(key => {
+  // Get props in original component order
+  const propsOrder = getPropsOrder(fiber);
+  const orderedProps = [...propsOrder, ...Array.from(changedProps)];
+  // Remove duplicates while preserving order
+  const uniqueOrderedProps = [...new Set(orderedProps)];
+
+  // Display props in order
+  uniqueOrderedProps.forEach(key => {
+    if (!changedProps.has(key)) return;
     const count = getPropsChangeCount(key);
     if (count > 0) {
       hasPropsChanges = true;
@@ -430,32 +439,37 @@ const renderSection = (
   title: string,
   data: Record<string, any>,
   changedKeys: Set<string>,
-  changedContext: Set<string> = new Set(),
 ): HTMLElement => {
   const section = templates.section();
   section.dataset.section = title;
 
-  const entries = Object.entries(data);
+  // Get ordered entries based on section type
+  let orderedEntries: Array<[string, any]> = [];
+  if (title.toLowerCase() === 'props') {
+    // Get props in original component order
+    const propsOrder = getPropsOrder(fiber);
+    const orderedProps = [...propsOrder, ...Object.keys(data)];
+    // Remove duplicates while preserving order
+    const uniqueOrderedProps = [...new Set(orderedProps)];
+    // Create entries in order
+    orderedEntries = uniqueOrderedProps
+      .filter(key => key in data)
+      .map(key => [key, data[key]]);
+  } else {
+    orderedEntries = Object.entries(data);
+  }
 
-  entries.forEach(([key, value]) => {
-    const isContextSection = title.toLowerCase() === 'context';
-    const isPropsSection = title.toLowerCase() === 'props';
-
-    // For Props section, use alternate fiber for previous values
-    const displayValue = isPropsSection
-      ? fiber.alternate?.memoizedProps?.[key] ?? value
-      : value;
-
+  orderedEntries.forEach(([key, value]) => {
     const el = createPropertyElement({
       componentName,
       didRender,
       propsContainer: propContainer,
       fiber,
       key,
-      value: displayValue,
+      value,
       section: title.toLowerCase(),
       level: 0,
-      changedKeys: isContextSection ? changedContext : changedKeys,
+      changedKeys,
       parentPath: '',
       objectPathMap: new WeakMap(),
       hasCumulativeChanges: true
@@ -711,8 +725,14 @@ export const createPropertyElement = ({
                     typeof value === 'boolean' ? newValue === 'true' :
                       newValue;
 
-                // Reset tracking before applying new value
-                resetStateTracking();
+                // Only proceed if the value actually changed
+                if (Object.is(value, convertedValue)) {
+                  if (input.parentNode) {
+                    input.replaceWith(valueElement);
+                  }
+                  return;
+                }
+
                 value = convertedValue;
 
                 // First apply the state/prop update
@@ -783,7 +803,7 @@ export const createPropertyElement = ({
                 }
 
                 // Re-render the yellow box to show the changes
-                renderPropsAndState(true, fiber);
+                // renderPropsAndState(true, fiber);
 
               } catch (error) {
                 if (input.parentNode) {

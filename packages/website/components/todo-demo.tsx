@@ -9,9 +9,9 @@ interface Todo {
 }
 
 function TodoInput({
-  value: input,
   onChange: setInput,
-  onAdd: addTodo
+  onAdd: addTodo,
+  value: input,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -135,9 +135,9 @@ export default function TodoDemo({ closeAction, pivanov }: { closeAction: () => 
         {todos.length} task{todos.length !== 1 ? 's' : ''}
       </div>
       <TodoInput
-        value={input}
         onChange={setInput}
         onAdd={addTodo}
+        value={input}
       />
       <TodoList items={todos} onDelete={deleteTodo} />
     </div>

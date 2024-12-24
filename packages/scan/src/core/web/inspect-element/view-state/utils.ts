@@ -50,13 +50,48 @@ export const getChangedProps = (fiber: Fiber): Set<string> => {
   const previousProps = fiber.alternate.memoizedProps ?? {};
   const currentProps = fiber.memoizedProps ?? {};
 
-  // Check changed or new props
-  for (const key in currentProps) {
+  // Track primitive changes separately
+  let primitiveChangeCount = 0;
+
+  // Get original prop order
+  const propsOrder = getPropsOrder(fiber);
+  const orderedProps = [...propsOrder, ...Object.keys(currentProps)];
+  // Remove duplicates while preserving order
+  const uniqueOrderedProps = [...new Set(orderedProps)];
+
+  // Check changed or new props in order
+  for (const key of uniqueOrderedProps) {
     if (key === 'children') continue;
-    if (!Object.is(currentProps[key], previousProps[key])) {
+    if (!(key in currentProps)) continue;
+
+    const currentValue = currentProps[key];
+    const previousValue = previousProps[key];
+
+    // Track direct changes
+    if (!Object.is(currentValue, previousValue)) {
       changes.add(key);
-      const count = (propsChangeCounts.get(key) ?? 0) + 1;
-      propsChangeCounts.set(key, count);
+
+      if (typeof currentValue !== 'function') {
+        primitiveChangeCount++;
+      // Increment count for primitive props normally
+        const count = (propsChangeCounts.get(key) ?? 0) + 1;
+        propsChangeCounts.set(key, count);
+      }
+    }
+  }
+
+  // If we had primitive changes, increment function props
+  if (primitiveChangeCount > 0) {
+    for (const key of uniqueOrderedProps) {
+      if (key === 'children') continue;
+      if (!(key in currentProps)) continue;
+
+      const value = currentProps[key];
+      if (typeof value === 'function') {
+        changes.add(key);
+        const count = (propsChangeCounts.get(key) ?? 0) + primitiveChangeCount;
+        propsChangeCounts.set(key, count);
+      }
     }
   }
 
@@ -229,7 +264,6 @@ export const getChangedContext = (fiber: Fiber): Set<string> => {
   if (!fiber.alternate) return changes;
 
   const currentContexts = getAllFiberContexts(fiber);
-  const _previousContexts = getAllFiberContexts(fiber.alternate);
 
   currentContexts.forEach((_currentValue, contextType) => {
     const contextName = (typeof contextType === 'object' && contextType !== null)
@@ -273,6 +307,7 @@ export const getPropsChangeCount = (name: string): number => propsChangeCounts.g
 export const getContextChangeCount = (name: string): number => contextChangeCounts.get(name) ?? 0;
 
 const STATE_NAME_REGEX = /\[(?<name>\w+),\s*set\w+\]/g;
+const PROPS_ORDER_REGEX = /\(\s*{\s*(?<props>[^}]+)\s*}\s*\)/;
 
 export const getStateNames = (fiber: Fiber): Array<string> => {
   const componentSource = fiber.type?.toString?.() || '';
@@ -280,6 +315,17 @@ export const getStateNames = (fiber: Fiber): Array<string> => {
     componentSource.matchAll(STATE_NAME_REGEX),
     (m: RegExpMatchArray) => m.groups?.name ?? ''
   ) : [];
+};
+
+export const getPropsOrder = (fiber: Fiber): Array<string> => {
+  const componentSource = fiber.type?.toString?.() || '';
+  const match = componentSource.match(PROPS_ORDER_REGEX);
+  if (!match?.groups?.props) return [];
+
+  return match.groups.props
+    .split(',')
+    .map((prop: string) => prop.trim().split(':')[0].split('=')[0].trim())
+    .filter(Boolean);
 };
 
 export const getStateFromFiber = (fiber: Fiber | null): Record<string, unknown> => {
