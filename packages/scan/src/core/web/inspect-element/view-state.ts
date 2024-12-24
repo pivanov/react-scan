@@ -1,7 +1,6 @@
 import type { Fiber } from 'react-reconciler';
 import { createHTMLTemplate } from '@web-utils/html-template';
 import { Store } from 'src/core';
-import { fastSerialize } from '../../instrumentation';
 import {
   getChangedProps,
   getChangedState,
@@ -433,14 +432,20 @@ export const createPropertyElement = (
     const prevValue = lastRendered.get(currentPath);
     const isChanged = prevValue !== undefined && prevValue !== value;
 
-    const isBadRender =
-      value &&
-      ['object', 'function'].includes(typeof value) &&
-      fastSerialize(value) === fastSerialize(prevValue) &&
-      isChanged &&
-      (changedKeys.has(key) || hasCumulativeChanges);
+    const shouldShowChange =
+      isChanged || changedKeys.has(key) || hasCumulativeChanges;
+
+    // Only show warning sign at the first level (level === 0)
+    const isBadRender = level === 0 && shouldShowChange;
 
     lastRendered.set(currentPath, value);
+
+    if (isBadRender) {
+      changedAt.set(currentPath, Date.now());
+      if (container.parentNode) {
+        createAndHandleFlashOverlay(container);
+      }
+    }
 
     if (isExpandable) {
       const isExpanded = EXPANDED_PATHS.has(currentPath);
@@ -725,13 +730,6 @@ export const createPropertyElement = (
           });
         }
       }
-    }
-
-    if (changedKeys.has(key)) {
-      changedAt.set(currentPath, Date.now());
-    }
-    if (changedAt.has(currentPath)) {
-      createAndHandleFlashOverlay(container);
     }
 
     return container;
