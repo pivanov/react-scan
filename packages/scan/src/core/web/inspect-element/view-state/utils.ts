@@ -103,8 +103,8 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
     ) {
       // Get current state values
       const currentState: ComponentState = {};
-      let memoizedState = fiber.memoizedState;
       const stateNames = getStateNames(fiber);
+      let memoizedState = fiber.memoizedState;
       let index = 0;
 
       while (memoizedState) {
@@ -140,13 +140,29 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
       while (memoizedState) {
         if (memoizedState.queue) {
           const name = stateNames[index] ?? `state${index}`;
-          previousState[name] = memoizedState.memoizedState;
+          let value = memoizedState.memoizedState;
+
+          // Check for pending updates in the queue
+          if (memoizedState.queue.pending) {
+            const pending = memoizedState.queue.pending;
+            let update = pending.next;
+            do {
+              if (update?.payload) {
+                value = typeof update.payload === 'function'
+                  ? update.payload(value)
+                  : update.payload;
+              }
+              update = update.next;
+            } while (update !== pending.next);
+          }
+
+          previousState[name] = value;
           index++;
         }
         memoizedState = memoizedState.next;
       }
 
-      // Compare values
+      // Compare values and track changes
       for (const name of Object.keys(currentState)) {
         const currentValue = currentState[name];
         const previousValue = previousState[name];
@@ -157,12 +173,19 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
           stateChangeCounts.set(name, count);
         }
       }
+
+      if (changes.size > 0) {
+        console.log('State changes:', {
+          current: currentState,
+          previous: previousState,
+          changes: Array.from(changes)
+        });
+      }
     }
-  } catch {
-  /* Silently fail */
+  } catch (error) {
+    console.error('Error tracking state changes:', error);
   }
 
-  console.log('changes', changes);
   return changes;
 };
 
