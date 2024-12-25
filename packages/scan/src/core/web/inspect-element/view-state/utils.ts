@@ -35,11 +35,16 @@ const stateChangeCounts = new Map<string, number>();
 const propsChangeCounts = new Map<string, number>();
 const contextChangeCounts = new Map<string, number>();
 
+// Track last rendered state values
+let lastRenderedStates = new WeakMap<Fiber>();
+
 // Reset all tracking
 export const resetStateTracking = (): void => {
   stateChangeCounts.clear();
   propsChangeCounts.clear();
   contextChangeCounts.clear();
+  // Create a new WeakMap instance
+  lastRenderedStates = new WeakMap<Fiber>();
 };
 
 // Simple change detection for props
@@ -112,7 +117,7 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
           const name = stateNames[index] ?? `state${index}`;
           let value = memoizedState.memoizedState;
 
-          // Check for pending updates in the queue
+          // Apply any pending updates
           if (memoizedState.queue.pending) {
             const pending = memoizedState.queue.pending;
             let update = pending.next;
@@ -132,52 +137,28 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
         memoizedState = memoizedState.next;
       }
 
-      // Get previous state values
-      const previousState: ComponentState = {};
-      memoizedState = fiber.alternate.memoizedState;
-      index = 0;
+      // Get the last rendered state for this fiber
+      const lastState = lastRenderedStates.get(fiber.alternate) || {};
 
-      while (memoizedState) {
-        if (memoizedState.queue) {
-          const name = stateNames[index] ?? `state${index}`;
-          let value = memoizedState.memoizedState;
-
-          // Check for pending updates in the queue
-          if (memoizedState.queue.pending) {
-            const pending = memoizedState.queue.pending;
-            let update = pending.next;
-            do {
-              if (update?.payload) {
-                value = typeof update.payload === 'function'
-                  ? update.payload(value)
-                  : update.payload;
-              }
-              update = update.next;
-            } while (update !== pending.next);
-          }
-
-          previousState[name] = value;
-          index++;
-        }
-        memoizedState = memoizedState.next;
-      }
-
-      // Compare values and track changes
+      // Compare with last rendered state
       for (const name of Object.keys(currentState)) {
         const currentValue = currentState[name];
-        const previousValue = previousState[name];
+        const lastValue = lastState[name];
 
-        if (!Object.is(currentValue, previousValue)) {
+        if (!Object.is(currentValue, lastValue)) {
           changes.add(name);
           const count = (stateChangeCounts.get(name) ?? 0) + 1;
           stateChangeCounts.set(name, count);
         }
       }
 
+      // Store current state for next comparison
+      lastRenderedStates.set(fiber, { ...currentState });
+
       if (changes.size > 0) {
         console.log('State changes:', {
           current: currentState,
-          previous: previousState,
+          last: lastState,
           changes: Array.from(changes)
         });
       }

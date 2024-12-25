@@ -705,7 +705,6 @@ export const createPropertyElement = ({
           valueElement.classList.add('react-scan-editable');
           valueElement.addEventListener('click', (e) => {
             e.stopPropagation();
-
             const input = templates.input();
             input.value = typeof value === 'string' ?
               value.replace(/^"(?:.*)"$/, '$1')
