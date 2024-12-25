@@ -2,6 +2,7 @@ import type { Fiber } from 'react-reconciler';
 import { createHTMLTemplate } from '@web-utils/html-template';
 import { Store } from 'src/core';
 import { getOverrideMethods } from '@web-inspect-element/utils';
+import { tryOrElse } from '@web-utils/helpers';
 import {
   getChangedProps,
   getChangedState,
@@ -348,14 +349,6 @@ export const replayComponent = async (fiber: any) => {
   }
 };
 
-// Utility Functions
-const tryOrElse = <T, E>(cb: () => T, val: E) => {
-  try {
-    return cb();
-  } catch (e) {
-    return val;
-  }
-};
 
 const isPromise = (value: any): value is Promise<unknown> => {
   return value && (value instanceof Promise || (typeof value === 'object' && 'then' in value));
@@ -701,6 +694,7 @@ export const createPropertyElement = ({
         const { overrideProps, overrideHookState } = getOverrideMethods();
         const canEdit = section === 'props' ? !!overrideProps : !!overrideHookState;
 
+
         if (valueElement && canEdit && isEditableValue(value)) {
           valueElement.classList.add('react-scan-editable');
           valueElement.addEventListener('click', (e) => {
@@ -715,117 +709,80 @@ export const createPropertyElement = ({
                 .replace(/&#39;/g, "'")
               : value.toString();
 
-            const updateValue = () => {
-              try {
-                const newValue = input.value;
-                const convertedValue =
-                  typeof value === 'number' ? Number(newValue) :
-                    typeof value === 'boolean' ? newValue === 'true' :
-                      newValue;
-
-                // Only proceed if the value actually changed
-                if (Object.is(value, convertedValue)) {
-                  if (input.parentNode) {
-                    input.replaceWith(valueElement);
-                  }
-                  return;
+            const restoreOriginalElement = () => {
+              tryOrElse(() => {
+                if (input.parentNode) {
+                  input.replaceWith(valueElement);
                 }
+              }, null);
+            };
 
-                value = convertedValue;
+            const updateValue = () => {
+              const newValue = tryOrElse(() => {
+                const inputValue = input.value;
+                return typeof value === 'number' ? Number(inputValue) :
+                  typeof value === 'boolean' ? inputValue === 'true' :
+                    inputValue;
+              }, value);
 
-                // First apply the state/prop update
-                if (section === 'props' && overrideProps) {
+              // Don't update if value hasn't changed
+              if (Object.is(value, newValue)) {
+                restoreOriginalElement();
+                return;
+              }
+
+              // Apply the update
+              if (section === 'props' && overrideProps) {
+                tryOrElse(() => {
                   if (parentPath) {
                     const parts = parentPath.split('.');
-                    // Get only the actual prop path parts (after 'props')
                     const path = parts.filter(part => part !== 'props' && part !== componentName);
                     path.push(key);
-                    overrideProps(fiber, path, convertedValue);
+                    overrideProps(fiber, path, newValue);
                   } else {
-                    overrideProps(fiber, [key], convertedValue);
+                    overrideProps(fiber, [key], newValue);
                   }
-                }
+                }, null);
+              }
 
-                if (section === 'state' && overrideHookState) {
-                  // Handle primitive state values (no path) differently
+              if (section === 'state' && overrideHookState) {
+                tryOrElse(() => {
                   if (!parentPath) {
                     const stateNames = getStateNames(fiber);
                     const namedStateIndex = stateNames.indexOf(key);
-                    const hookId = namedStateIndex !== -1 ?
-                      namedStateIndex.toString() :
-                      '0';
-
-                    // Update the primitive state value directly
-                    overrideHookState(fiber, hookId, [], convertedValue);
-
-                    // Trigger flash overlay for the edited value
-                    const currentPath = getPath(componentName, section, parentPath, key);
-                    changedAt.set(currentPath, Date.now());
-                    createAndHandleFlashOverlay(container);
+                    const hookId = namedStateIndex !== -1 ? namedStateIndex.toString() : '0';
+                    overrideHookState(fiber, hookId, [], newValue);
                   } else {
-                    // For nested state updates
                     const fullPathParts = parentPath.split('.');
                     const stateIndex = fullPathParts.indexOf('state');
                     if (stateIndex === -1) return;
 
                     const statePath = fullPathParts.slice(stateIndex + 1);
                     const baseStateKey = statePath[0];
-
                     const stateNames = getStateNames(fiber);
                     const namedStateIndex = stateNames.indexOf(baseStateKey);
-                    const hookId = namedStateIndex !== -1 ?
-                      namedStateIndex.toString() :
-                      '0';
-
-                    const nestedPath = statePath.slice(1).map(part => {
-                      return /^\d+$/.test(part) ? parseInt(part, 10) : part;
-                    });
-
+                    const hookId = namedStateIndex !== -1 ? namedStateIndex.toString() : '0';
+                    const nestedPath = statePath.slice(1).map(part => /^\d+$/.test(part) ? parseInt(part, 10) : part);
                     nestedPath.push(key);
-                    overrideHookState(fiber, hookId, nestedPath, convertedValue);
-
-                    // Trigger flash overlay for nested state updates
-                    const currentPath = getPath(componentName, section, parentPath, key);
-                    changedAt.set(currentPath, Date.now());
-                    createAndHandleFlashOverlay(container);
+                    overrideHookState(fiber, hookId, nestedPath, newValue);
                   }
-                }
-
-                if (parentPath) {
-                  const parentParts = parentPath.split('.');
-                  const parentKey = parentParts[parentParts.length - 1];
-                  const grandParentPath = parentParts.slice(0, -1).join('.');
-                  const parentCurrentPath = getPath(componentName, section, grandParentPath, parentKey);
-                  changedAt.set(parentCurrentPath, Date.now());
-
-                  // Find and flash the parent container
-                  const parentContainer = container.closest('.react-scan-property')?.parentElement?.closest('.react-scan-property');
-                  if (parentContainer instanceof HTMLElement) {
-                    createAndHandleFlashOverlay(parentContainer);
-                  }
-                }
-
-              } catch (error) {
-                if (input.parentNode) {
-                  input.replaceWith(valueElement);
-                }
+                }, null);
               }
             };
 
+            // Only handle Enter and Escape
             input.addEventListener('keydown', (e: KeyboardEvent) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 updateValue();
               } else if (e.key === 'Escape') {
-                if (input.parentNode) {
-                  input.replaceWith(valueElement);
-                }
+                restoreOriginalElement();
               }
             });
 
-            // Add blur handler to update when focus is lost
+            // Treat blur as cancel
             input.addEventListener('blur', () => {
-              updateValue();
+              restoreOriginalElement();
             });
 
             valueElement.replaceWith(input);

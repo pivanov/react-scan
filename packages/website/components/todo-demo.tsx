@@ -91,7 +91,13 @@ function TodoItem({ todo, onDelete, obj }: {
   );
 }
 
-export default function TodoDemo({ closeAction, pivanov }: { closeAction: () => void, pivanov: string }) {
+interface TodoDemoProps {
+  closeAction: () => void;
+  pivanov: string;
+}
+
+export default function TodoDemo(props: TodoDemoProps) {
+  const { closeAction, pivanov } = props;
   const [input, setInput] = useState('');
   const [todos, setTodos] = useState<Array<Todo>>([]);
   const [isMobile, setIsMobile] = useState(false);

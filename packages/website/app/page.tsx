@@ -72,13 +72,13 @@ export default function Home() {
 
         {showDemo && isMobile && (
           <div className="mt-4">
-            <TodoDemo closeAction={() => setShowDemo(false)} />
+            <TodoDemo closeAction={() => setShowDemo(false)} pivanov='pivanov' />
           </div>
         )}
 
         <Companies />
       </div>
-      {showDemo && !isMobile && <TodoDemo closeAction={() => setShowDemo(false)} />}
+      {showDemo && !isMobile && <TodoDemo closeAction={() => setShowDemo(false)} pivanov='pivanov' />}
     </div>
   );
 }
