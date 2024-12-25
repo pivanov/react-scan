@@ -34,14 +34,12 @@ interface ReactContext<T = unknown> {
 const stateChangeCounts = new Map<string, number>();
 const propsChangeCounts = new Map<string, number>();
 const contextChangeCounts = new Map<string, number>();
-const lastRendered = new Map<string, unknown>();
 
 // Reset all tracking
 export const resetStateTracking = (): void => {
   stateChangeCounts.clear();
   propsChangeCounts.clear();
   contextChangeCounts.clear();
-  lastRendered.clear();
 };
 
 // Simple change detection for props
