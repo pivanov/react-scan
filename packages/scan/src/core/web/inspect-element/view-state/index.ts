@@ -15,14 +15,13 @@ import {
   getPropsChangeCount,
   getContextChangeCount,
   getPropsOrder,
-  // trackStateUpdate,
 } from './utils';
 
 // Types and Interfaces
 interface PropertyElementOptions {
   componentName: string;
   didRender: boolean;
-  propsContainer: HTMLDivElement;
+  propContainer: HTMLDivElement;
   fiber: Fiber;
   key: string;
   value: any;
@@ -141,7 +140,7 @@ export const renderPropsAndState = (didRender: boolean, fiber: Fiber) => {
   const changedContext = getChangedContext(fiber);
 
   // console.log('@@@ changedProps', changedProps);
-  console.log('@@@ changedState', changedState);
+  // console.log('@@@ changedState', changedState);
   // console.log('@@@ changedContext', changedContext);
 
   propContainer.innerHTML = '';
@@ -463,7 +462,7 @@ const renderSection = (
     const el = createPropertyElement({
       componentName,
       didRender,
-      propsContainer: propContainer,
+      propContainer,
       fiber,
       key,
       value,
@@ -485,7 +484,7 @@ const renderSection = (
 export const createPropertyElement = ({
   componentName,
   didRender,
-  propsContainer,
+  propContainer,
   fiber,
   key,
   value,
@@ -592,7 +591,7 @@ export const createPropertyElement = ({
             const el = createPropertyElement({
               componentName,
               didRender,
-              propsContainer,
+              propContainer,
               fiber,
               key: index.toString(),
               value: item,
@@ -611,7 +610,7 @@ export const createPropertyElement = ({
             const el = createPropertyElement({
               componentName,
               didRender,
-              propsContainer,
+              propContainer,
               fiber,
               key: k,
               value: v,
@@ -644,7 +643,7 @@ export const createPropertyElement = ({
                 const el = createPropertyElement({
                   componentName,
                   didRender,
-                  propsContainer,
+                  propContainer,
                   fiber,
                   key: index.toString(),
                   value: item,
@@ -663,7 +662,7 @@ export const createPropertyElement = ({
                 const el = createPropertyElement({
                   componentName,
                   didRender,
-                  propsContainer,
+                  propContainer,
                   fiber,
                   key: k,
                   value: v,
@@ -759,8 +758,11 @@ export const createPropertyElement = ({
 
                     // Update the primitive state value directly
                     overrideHookState(fiber, hookId, [], convertedValue);
-                    // Track the state update
-                    // trackStateUpdate(key, convertedValue);
+
+                    // Trigger flash overlay for the edited value
+                    const currentPath = getPath(componentName, section, parentPath, key);
+                    changedAt.set(currentPath, Date.now());
+                    createAndHandleFlashOverlay(container);
                   } else {
                     // For nested state updates
                     const fullPathParts = parentPath.split('.');
@@ -782,15 +784,13 @@ export const createPropertyElement = ({
 
                     nestedPath.push(key);
                     overrideHookState(fiber, hookId, nestedPath, convertedValue);
-                    // Track the state update for nested values
-                    // trackStateUpdate(baseStateKey, convertedValue);
+
+                    // Trigger flash overlay for nested state updates
+                    const currentPath = getPath(componentName, section, parentPath, key);
+                    changedAt.set(currentPath, Date.now());
+                    createAndHandleFlashOverlay(container);
                   }
                 }
-
-                // // Trigger flash overlay for the edited value and its parent
-                // const currentPath = getPath(componentName, section, parentPath, key);
-                // changedAt.set(currentPath, Date.now());
-                // createAndHandleFlashOverlay(container);
 
                 if (parentPath) {
                   const parentParts = parentPath.split('.');
