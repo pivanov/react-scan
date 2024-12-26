@@ -23,12 +23,19 @@ jobs:
       - name: Check commit message
         id: check
         run: |
+          # Print the commit message for debugging
           echo "Commit message: ${{ github.event.head_commit.message }}"
+
+          # Check if commit message contains [publish]
+          # This allows us to control when we want to publish to npm
+          # Example commit message: "feat: add new feature [publish]"
           if [[ "${{ github.event.head_commit.message }}" == *"[publish]"* ]]; then
             echo "Found [publish] in commit message"
+            # Set output variable for other steps to use
             echo "should_publish=true" >> $GITHUB_OUTPUT
           else
             echo "No [publish] tag found, skipping..."
+            # Exit successfully but skip further steps
             exit 0
           fi
 
@@ -66,17 +73,23 @@ jobs:
         run: |
           # Stage all changes first
           git add package.json README.md
+
           # Stash any changes
           git stash
+
           # Get latest changes
           git pull --rebase origin main
+
           # Pop stashed changes
           git stash pop
+
           # Version bump and build
           npm version patch
           pnpm build
+
           # Commit and push
           git add package.json README.md
           git diff --staged --quiet || (git commit -m "chore: bump version [skip ci]" && git push)
+
           # Publish
           pnpm publish --access public --no-git-checks
