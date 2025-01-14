@@ -1,4 +1,3 @@
-import { signal } from '@preact/signals';
 import { type Fiber, getDisplayName } from 'bippy';
 import { Component } from 'preact';
 import {
@@ -17,22 +16,21 @@ import { cn, tryOrElse } from '~web/utils/helpers';
 import { constant } from '~web/utils/preact/constant';
 import { flashManager } from './flash-overlay';
 import {
-  type InspectorData,
+  type SectionData,
   collectInspectorData,
   ensureRecord,
-  getContextChangeCount,
   getCurrentFiberState,
-  getPropsChangeCount,
-  getStateChangeCount,
   getStateNames,
   isPromise,
-  resetStateTracking,
 } from './overlay/utils';
+import {
+  TIMELINE_MAX_UPDATES,
+  type TimelineUpdate,
+  globalInspectorState,
+  inspectorState,
+  timelineState,
+} from './states';
 import { getCompositeFiberFromElement, getOverrideMethods } from './utils';
-
-interface InspectorState extends InspectorData {
-  fiber: Fiber | null;
-}
 
 type InspectableValue =
   | Record<string, unknown>
@@ -85,30 +83,6 @@ interface ValueMetadata {
   entries?: Record<string, ValueMetadata>;
   items?: Array<ValueMetadata>;
 }
-
-const globalInspectorState = {
-  lastRendered: new Map<string, unknown>(),
-  expandedPaths: new Set<string>(),
-  cleanup: () => {
-    globalInspectorState.lastRendered.clear();
-    globalInspectorState.expandedPaths.clear();
-    flashManager.cleanupAll();
-    resetStateTracking();
-    inspectorState.value = {
-      fiber: null,
-      fiberProps: { current: {}, changes: new Set() },
-      fiberState: { current: {}, changes: new Set() },
-      fiberContext: { current: {}, changes: new Set() },
-    };
-  },
-};
-
-const inspectorState = signal<InspectorState>({
-  fiber: null,
-  fiberProps: { current: {}, changes: new Set() },
-  fiberState: { current: {}, changes: new Set() },
-  fiberContext: { current: {}, changes: new Set() },
-});
 
 class InspectorErrorBoundary extends Component {
   state = { hasError: false };
@@ -648,10 +622,7 @@ const PropertyElement = ({
     globalInspectorState.lastRendered.set(currentPath, value);
 
     const isFirstRender = !globalInspectorState.lastRendered.has(currentPath);
-    const shouldFlash =
-      isChanged &&
-      refElement.current &&
-      !isFirstRender;
+    const shouldFlash = isChanged && refElement.current && !isFirstRender;
 
     if (shouldFlash && refElement.current && level === 0) {
       flashManager.create(refElement.current);
@@ -762,70 +733,73 @@ const PropertyElement = ({
     }
   }, [canEdit]);
 
-  const handleSave = useCallback((newValue: unknown) => {
-    if (isEqual(value, newValue)) {
-      setIsEditing(false);
-      return;
-    }
+  const handleSave = useCallback(
+    (newValue: unknown) => {
+      if (isEqual(value, newValue)) {
+        setIsEditing(false);
+        return;
+      }
 
-    if (section === 'props' && overrideProps) {
-      tryOrElse(() => {
-        if (!fiber) return;
+      if (section === 'props' && overrideProps) {
+        tryOrElse(() => {
+          if (!fiber) return;
 
-        if (parentPath) {
-          const parts = parentPath.split('.');
-          const path = parts.filter(
-            (part) => part !== 'props' && part !== getDisplayName(fiber.type),
-          );
-          path.push(name);
-          overrideProps(fiber, path, newValue);
-        } else {
-          overrideProps(fiber, [name], newValue);
-        }
-      }, null);
-    }
-
-    if (section === 'state' && overrideHookState) {
-      tryOrElse(() => {
-        if (!fiber) return;
-
-        if (!parentPath) {
-          const stateNames = getStateNames(fiber);
-          const namedStateIndex = stateNames.indexOf(name);
-          const hookId =
-            namedStateIndex !== -1 ? namedStateIndex.toString() : '0';
-          overrideHookState(fiber, hookId, [], newValue);
-        } else {
-          const fullPathParts = parentPath.split('.');
-          const stateIndex = fullPathParts.indexOf('state');
-          if (stateIndex === -1) return;
-
-          const statePath = fullPathParts.slice(stateIndex + 1);
-          const baseStateKey = statePath[0];
-          const stateNames = getStateNames(fiber);
-          const namedStateIndex = stateNames.indexOf(baseStateKey);
-          const hookId =
-            namedStateIndex !== -1 ? namedStateIndex.toString() : '0';
-
-          const currentState = inspectorState.value.fiberState.current;
-          if (!currentState || !(baseStateKey in currentState)) {
-            // biome-ignore lint/suspicious/noConsole: Intended debug output
-            console.warn(sanitizeErrorMessage('Invalid state key'));
-            return;
+          if (parentPath) {
+            const parts = parentPath.split('.');
+            const path = parts.filter(
+              (part) => part !== 'props' && part !== getDisplayName(fiber.type),
+            );
+            path.push(name);
+            overrideProps(fiber, path, newValue);
+          } else {
+            overrideProps(fiber, [name], newValue);
           }
+        }, null);
+      }
 
-          const updatedState = updateNestedValue(
-            currentState[baseStateKey],
-            statePath.slice(1).concat(name),
-            newValue,
-          );
-          overrideHookState(fiber, hookId, [], updatedState);
-        }
-      }, null);
-    }
+      if (section === 'state' && overrideHookState) {
+        tryOrElse(() => {
+          if (!fiber) return;
 
-    setIsEditing(false);
-  }, [value, section, overrideProps, overrideHookState, fiber, name, parentPath]);
+          if (!parentPath) {
+            const stateNames = getStateNames(fiber);
+            const namedStateIndex = stateNames.indexOf(name);
+            const hookId =
+              namedStateIndex !== -1 ? namedStateIndex.toString() : '0';
+            overrideHookState(fiber, hookId, [], newValue);
+          } else {
+            const fullPathParts = parentPath.split('.');
+            const stateIndex = fullPathParts.indexOf('state');
+            if (stateIndex === -1) return;
+
+            const statePath = fullPathParts.slice(stateIndex + 1);
+            const baseStateKey = statePath[0];
+            const stateNames = getStateNames(fiber);
+            const namedStateIndex = stateNames.indexOf(baseStateKey);
+            const hookId =
+              namedStateIndex !== -1 ? namedStateIndex.toString() : '0';
+
+            const currentState = inspectorState.value.fiberState.current;
+            if (!currentState || !(baseStateKey in currentState)) {
+              // biome-ignore lint/suspicious/noConsole: Intended debug output
+              console.warn(sanitizeErrorMessage('Invalid state key'));
+              return;
+            }
+
+            const updatedState = updateNestedValue(
+              currentState[baseStateKey],
+              statePath.slice(1).concat(name),
+              newValue,
+            );
+            overrideHookState(fiber, hookId, [], updatedState);
+          }
+        }, null);
+      }
+
+      setIsEditing(false);
+    },
+    [value, section, overrideProps, overrideHookState, fiber, name, parentPath],
+  );
 
   const checkCircularInValue = useMemo((): boolean => {
     if (!value || typeof value !== 'object' || isPromise(value)) return false;
@@ -866,24 +840,22 @@ const PropertyElement = ({
           if (metadata.items.length === 0) return null;
           return (
             <div className="react-scan-nested">
-              {
-                metadata.items.map((item, i) => {
-                  const itemKey = `${currentPath}-item-${item.type}-${i}`;
-                  return (
-                    <PropertyElement
-                      key={itemKey}
-                      name={`${i}`}
-                      value={item}
-                      section={section}
-                      level={level + 1}
-                      parentPath={currentPath}
-                      objectPathMap={objectPathMap}
-                      changedKeys={changedKeys}
-                      allowEditing={allowEditing}
-                    />
-                  );
-                })
-              }
+              {metadata.items.map((item, i) => {
+                const itemKey = `${currentPath}-item-${item.type}-${i}`;
+                return (
+                  <PropertyElement
+                    key={itemKey}
+                    name={`${i}`}
+                    value={item}
+                    section={section}
+                    level={level + 1}
+                    parentPath={currentPath}
+                    objectPathMap={objectPathMap}
+                    changedKeys={changedKeys}
+                    allowEditing={allowEditing}
+                  />
+                );
+              })}
             </div>
           );
         }
@@ -900,10 +872,7 @@ const PropertyElement = ({
         entries = Array.from(view).map((v, i) => [i, v]);
       } else if (ArrayBuffer.isView(obj)) {
         if (obj instanceof BigInt64Array || obj instanceof BigUint64Array) {
-          entries = Array.from({ length: obj.length }, (_, i) => [
-            i,
-            obj[i],
-          ]);
+          entries = Array.from({ length: obj.length }, (_, i) => [i, obj[i]]);
         } else {
           const typedArray = obj as unknown as ArrayLike<number>;
           entries = Array.from(typedArray).map((v, i) => [i, v]);
@@ -928,39 +897,27 @@ const PropertyElement = ({
 
       return (
         <div className="react-scan-nested">
-          {
-            entries.map(([key, val]) => {
-              const itemKey = `${currentPath}-${typeof key === 'number' ? `item-${key}` : key}`;
-              return (
-                <PropertyElement
-                  key={itemKey}
-                  name={String(key)}
-                  value={val}
-                  section={section}
-                  level={level + 1}
-                  parentPath={currentPath}
-                  objectPathMap={objectPathMap}
-                  changedKeys={changedKeys}
-                  allowEditing={canEditChildren}
-                />
-              );
-            })
-          }
+          {entries.map(([key, val]) => {
+            const itemKey = `${currentPath}-${typeof key === 'number' ? `item-${key}` : key}`;
+            return (
+              <PropertyElement
+                key={itemKey}
+                name={String(key)}
+                value={val}
+                section={section}
+                level={level + 1}
+                parentPath={currentPath}
+                objectPathMap={objectPathMap}
+                changedKeys={changedKeys}
+                allowEditing={canEditChildren}
+              />
+            );
+          })}
         </div>
       );
     },
     [section, level, currentPath, objectPathMap, changedKeys, allowEditing],
   );
-
-  const renderMemoizationIcon = useMemo(() => {
-    if (changedKeys.has(`${name}:memoized`)) {
-      return <Icon name="icon-shield" className="text-green-600" size={14} />;
-    }
-    if (changedKeys.has(`${name}:unmemoized`)) {
-      return <Icon name="icon-flame" className="text-red-500" size={14} />;
-    }
-    return null;
-  }, [changedKeys, name]);
 
   if (checkCircularInValue) {
     return (
@@ -978,35 +935,28 @@ const PropertyElement = ({
   return (
     <div ref={refElement} className="react-scan-property">
       <div className="react-scan-property-content">
-        {
-          isExpandableValue && (
-            <button
-              type="button"
-              onClick={handleToggleExpand}
-              className="react-scan-arrow"
-            >
-              <Icon
-                name="icon-chevron-right"
-                size={12}
-                className={cn({
-                  'rotate-90': isExpanded,
-                })}
-              />
-            </button>
-          )
-        }
+        {isExpandableValue && (
+          <button
+            type="button"
+            onClick={handleToggleExpand}
+            className="react-scan-arrow"
+          >
+            <Icon
+              name="icon-chevron-right"
+              size={12}
+              className={cn({
+                'rotate-90': isExpanded,
+              })}
+            />
+          </button>
+        )}
 
         <div
-          className={cn(
-            'group',
-            'react-scan-preview-line',
-            {
-              'react-scan-highlight': isChanged,
-            },
-          )}
+          className={cn('group', 'react-scan-preview-line', {
+            'react-scan-highlight': isChanged,
+          })}
         >
-          {
-            isBadRender &&
+          {isBadRender &&
             !changedKeys.has(`${name}:memoized`) &&
             !changedKeys.has(`${name}:unmemoized`) && (
               <Icon
@@ -1014,9 +964,25 @@ const PropertyElement = ({
                 className="text-yellow-500"
                 size={14}
               />
+            )}
+          {
+            changedKeys.has(`${name}:unmemoized`) && (
+              <Icon
+                name="icon-flame"
+                className="text-red-500"
+                size={14}
+              />
             )
           }
-          {renderMemoizationIcon}
+          {
+            changedKeys.has(`${name}:memoized`) && (
+              <Icon
+                name="icon-shield"
+                className="text-green-600"
+                size={14}
+              />
+            )
+          }
           <div className="react-scan-key">{name}:</div>
           {
             isEditing && isEditableValue(value, parentPath)
@@ -1117,95 +1083,89 @@ const PropertySection = ({ title, section }: PropertySectionProps) => {
 const WhatChanged = constant(() => {
   const refPrevFiber = useRef<Fiber | null>(null);
   const [isExpanded, setIsExpanded] = useState(Store.wasDetailsOpen.value);
-  const [shouldShow, setShouldShow] = useState(false);
 
-  const {
-    fiber,
-    fiberProps,
-    fiberState,
-    fiberContext,
-  } = inspectorState.value;
+  const { fiber, fiberProps, fiberState, fiberContext } = inspectorState.value;
 
   const renderSection = useCallback((
     sectionName: 'state' | 'props' | 'context',
-    items: Set<string>,
-    getCount: (key: string) => number,
+    items: SectionData,
   ) => {
-    const elements = Array.from(items).reduce<JSX.Element[]>((acc, key) => {
-      if (sectionName === 'props') {
-        const isUnmemoized = key.endsWith(':unmemoized');
-        if (isUnmemoized) {
-          acc.push(
-            <li key={key}>
-              <div>
-                {key.split(':')[0]}{' '}
-                <Icon
-                  name="icon-flame"
-                  className="text-white shadow-sm mr-2"
-                  size={14}
-                />
-              </div>
-            </li>,
-          );
-        }
-      }
+    const elements = Array.from(items.changes)
+      .reduce<JSX.Element[]>((acc, key) => {
+        if (sectionName === 'props') {
+            const isUnmemoized = key.endsWith(':unmemoized');
+            if (isUnmemoized) {
+              acc.push(
+                <li key={key}>
+                  <div>
+                    {key.split(':')[0]}{' '}
+                    <Icon
+                      name="icon-flame"
+                      className="text-white shadow-sm mr-2"
+                      size={14}
+                    />
+                  </div>
+                </li>,
+              );
+              return acc;
+            }
+          }
 
-      const count = getCount(key);
-      if (count > 0) {
-        const displayKey =
-          sectionName === 'context' ? key.replace(/^context\./, '') : key;
-        acc.push(
-          <li key={key}>
-            {displayKey} ×{count}
-          </li>,
-        );
-      }
+          const count = items.changesCounts.get(key) ?? 0;
+          if (count > 0) {
+            const displayKey =
+              sectionName === 'context' ? key.replace(/^context\./, '') : key;
 
-      return acc;
-    }, []);
+            acc.push(
+              <li key={key}>
+                {displayKey} ×{count}
+              </li>,
+            );
+          }
 
-    if (!elements.length) return null;
+        return acc;
+      }, []);
 
-    return (
-      <>
-        <div>{sectionName.charAt(0).toUpperCase() + sectionName.slice(1)}:</div>
-        <ul>{elements}</ul>
-      </>
-    );
+      if (!elements.length) return null;
+
+      return (
+        <>
+          <div>
+            {sectionName.charAt(0).toUpperCase() + sectionName.slice(1)}:
+          </div>
+          <ul>{elements}</ul>
+        </>
+      );
   }, []);
 
-  const stateSection = useMemo(
-    () => renderSection('state', fiberState.changes, getStateChangeCount),
-    [fiberState.changes, renderSection],
-  );
-
-  const propsSection = useMemo(
-    () => renderSection('props', fiberProps.changes, getPropsChangeCount),
-    [fiberProps.changes, renderSection],
-  );
-
-  const contextSection = useMemo(
-    () => renderSection('context', fiberContext.changes, getContextChangeCount),
-    [fiberContext.changes, renderSection],
-  );
-
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   const { hasChanges, sections } = useMemo(() => {
-    return {
-      hasChanges: !!(stateSection || propsSection || contextSection),
-      sections: [stateSection, propsSection, contextSection],
-    };
-  }, [stateSection, propsSection, contextSection]);
-
-  useEffect(() => {
     if (!refPrevFiber.current || refPrevFiber.current.type !== fiber?.type) {
       refPrevFiber.current = fiber;
-      setShouldShow(false);
-      return;
+      return {
+        hasChanges: false,
+        sections: [],
+      };
     }
 
-    refPrevFiber.current = fiber;
-    setShouldShow(hasChanges);
-  }, [hasChanges, fiber]);
+    const hasChanges = !!(
+      fiberProps.changes.size > 0 ||
+      fiberState.changes.size > 0 ||
+      fiberContext.changes.size > 0
+    );
+
+    const sections = [
+      renderSection('props', fiberProps),
+      renderSection('state', fiberState),
+      renderSection('context', fiberContext),
+    ];
+
+
+    return {
+      hasChanges,
+      sections,
+    };
+  }, [fiberState, fiberProps, fiberContext]);
 
   const handleToggle = useCallback(() => {
     setIsExpanded((state) => {
@@ -1216,14 +1176,11 @@ const WhatChanged = constant(() => {
 
   return (
     <div
-      className={cn(
-        'react-scan-expandable',
-        {
-          'react-scan-expanded': shouldShow,
-        },
-      )}
+      className={cn('react-scan-expandable', {
+        'react-scan-expanded': hasChanges,
+      })}
     >
-      {shouldShow && refPrevFiber.current?.type === fiber?.type && (
+      {hasChanges && (
         <div
           onClick={handleToggle}
           onKeyDown={(e) => e.key === 'Enter' && handleToggle()}
@@ -1236,7 +1193,7 @@ const WhatChanged = constant(() => {
             'opacity-0',
             'transition-all duration-300 delay-300',
             {
-              'opacity-100 delay-0': shouldShow,
+              'opacity-100 delay-0': hasChanges,
             },
           )}
         >
@@ -1273,43 +1230,57 @@ const WhatChanged = constant(() => {
 
 export const Inspector = constant(() => {
   const refLastInspectedFiber = useRef<Fiber | null>(null);
+  const refPendingUpdates = useRef<Set<Fiber>>(new Set<Fiber>());
 
   const isSettingsOpen = signalIsSettingsOpen.value;
 
   useEffect(() => {
-    let isProcessing = false;
-    const pendingUpdates = new Set<Fiber>();
 
-    const processNextUpdate = () => {
-      if (pendingUpdates.size === 0) {
-        isProcessing = false;
+    const processUpdate = () => {
+      if (refPendingUpdates.current.size === 0) return;
+
+      const fiber = Array.from(refPendingUpdates.current)[0];
+      refPendingUpdates.current.clear();
+
+      const timeline = timelineState.value;
+      if (timeline.isReplaying) {
+        const update = timeline.updates[timeline.currentIndex];
+        refLastInspectedFiber.current = update.fiber;
+
+        inspectorState.value = {
+          fiber: update.fiber,
+          fiberProps: update.props,
+          fiberState: update.state,
+          fiberContext: update.context,
+        };
+        timelineState.value.isReplaying = false;
         return;
       }
 
-      const nextFiber = Array.from(pendingUpdates)[0];
-      pendingUpdates.delete(nextFiber);
+      refLastInspectedFiber.current = fiber;
+      inspectorState.value = {
+        fiber,
+        ...collectInspectorData(fiber),
+      };
 
-      try {
-        refLastInspectedFiber.current = nextFiber;
-
-        inspectorState.value = {
-          fiber: nextFiber,
-          ...collectInspectorData(nextFiber),
-        };
-      } finally {
-        if (pendingUpdates.size > 0) {
-          queueMicrotask(processNextUpdate);
-        } else {
-          isProcessing = false;
-        }
+      if (refPendingUpdates.current.size > 0) {
+        queueMicrotask(processUpdate);
       }
+    };
+
+    const scheduleUpdate = (fiber: Fiber) => {
+      refPendingUpdates.current.add(fiber);
+      queueMicrotask(processUpdate);
     };
 
     const unSubState = Store.inspectState.subscribe((state) => {
       if (state.kind !== 'focused' || !state.focusedDomElement) {
-        pendingUpdates.clear();
+        refPendingUpdates.current.clear();
+        refLastInspectedFiber.current = null;
+        globalInspectorState.cleanup();
         return;
       }
+
 
       if (state.kind === 'focused') {
         signalIsSettingsOpen.value = false;
@@ -1320,37 +1291,19 @@ export const Inspector = constant(() => {
       );
       if (!parentCompositeFiber) return;
 
-      pendingUpdates.clear();
-      globalInspectorState.cleanup();
-      refLastInspectedFiber.current = parentCompositeFiber;
+      if (refLastInspectedFiber.current?.type !== parentCompositeFiber.type) {
+        refPendingUpdates.current.clear();
+        globalInspectorState.cleanup();
+        scheduleUpdate(parentCompositeFiber);
+      }
 
-      const {
-        fiberProps,
-        fiberState,
-        fiberContext,
-      } = collectInspectorData(parentCompositeFiber);
-
-      inspectorState.value = {
-        fiber: parentCompositeFiber,
-        fiberProps: {
-          ...fiberProps,
-          changes: new Set(),
-        },
-        fiberState: {
-          ...fiberState,
-          changes: new Set(),
-        },
-        fiberContext: {
-          ...fiberContext,
-          changes: new Set(),
-        },
-      };
     });
 
-    const unSubReport = Store.lastReportTime.subscribe(() => {
+    const unSubLastReportTime = Store.lastReportTime.subscribe(() => {
       const inspectState = Store.inspectState.value;
-      if (inspectState.kind !== 'focused') {
-        pendingUpdates.clear();
+      if (inspectState.kind !== 'focused' || !inspectState.focusedDomElement) {
+        refPendingUpdates.current.clear();
+        refLastInspectedFiber.current = null;
         return;
       }
 
@@ -1364,22 +1317,71 @@ export const Inspector = constant(() => {
         return;
       }
 
-      if (parentCompositeFiber.type === refLastInspectedFiber.current?.type) {
-        pendingUpdates.add(parentCompositeFiber);
+      scheduleUpdate(parentCompositeFiber);
 
-        if (!isProcessing) {
-          isProcessing = true;
-          queueMicrotask(processNextUpdate);
+      requestAnimationFrame(() => {
+        if (!element.isConnected) {
+          refPendingUpdates.current.clear();
+          refLastInspectedFiber.current = null;
+          globalInspectorState.cleanup();
+          Store.inspectState.value = {
+            kind: 'inspecting',
+            hoveredDomElement: null,
+          };
+        }
+      });
+    });
+
+    const unSubInspectorState = inspectorState.subscribe((state) => {
+      if (!state.fiber || !refLastInspectedFiber.current) return;
+      if (state.fiber.type !== refLastInspectedFiber.current.type) return;
+      if (timelineState.value.isReplaying) return;
+
+      const update: TimelineUpdate = {
+        fiber: state.fiber,
+        timestamp: Date.now(),
+        props: state.fiberProps,
+        state: state.fiberState,
+        context: state.fiberContext,
+        stateNames: getStateNames(state.fiber),
+      };
+
+      const { updates, currentIndex, totalUpdates } = timelineState.value;
+      let newUpdates: TimelineUpdate[];
+
+      if (updates.length >= TIMELINE_MAX_UPDATES) {
+        if (currentIndex < updates.length - 1) {
+          newUpdates = [...updates.slice(0, currentIndex + 1), update].slice(-TIMELINE_MAX_UPDATES);
+        } else {
+          newUpdates = [...updates.slice(1), update];
+        }
+      } else {
+        if (currentIndex < updates.length - 1) {
+          newUpdates = [...updates.slice(0, currentIndex + 1), update];
+        } else {
+          newUpdates = [...updates, update];
         }
       }
+
+      const newIndex = newUpdates.length - 1;
+      const newTotal = currentIndex < updates.length - 1
+        ? totalUpdates - (updates.length - currentIndex - 1) + 1
+        : totalUpdates + 1;
+
+      timelineState.value = {
+        ...timelineState.value,
+        updates: newUpdates,
+        currentIndex: newIndex,
+        totalUpdates: newTotal,
+      };
     });
 
     return () => {
       unSubState();
-      unSubReport();
-      pendingUpdates.clear();
+      unSubLastReportTime();
+      unSubInspectorState();
+      refPendingUpdates.current.clear();
       globalInspectorState.cleanup();
-      resetStateTracking();
     };
   }, []);
 
@@ -1394,10 +1396,12 @@ export const Inspector = constant(() => {
           'transition-opacity duration-150 delay-0',
           'pointer-events-none',
           {
-            'opacity-100 delay-300 pointer-events-auto max-h-["auto"]': !isSettingsOpen,
+            'opacity-100 delay-300 pointer-events-auto max-h-["auto"]':
+              !isSettingsOpen,
           },
         )}
       >
+        {/* <Timeline /> */}
         <WhatChanged />
         <PropertySection title="Props" section="props" />
         <PropertySection title="State" section="state" />
@@ -1412,7 +1416,15 @@ export const replayComponent = async (fiber: Fiber): Promise<void> => {
   if (!overrideProps || !overrideHookState || !fiber) return;
 
   const currentProps = fiber.memoizedProps || {};
-  for (const key of Object.keys(currentProps)) {
+  const propKeys = Object.keys(currentProps).filter((key) => {
+    const value = currentProps[key];
+    if (Array.isArray(value) || typeof value === 'string') {
+      return !Number.isInteger(Number(key)) && key !== 'length';
+    }
+    return true;
+  });
+
+  for (const key of propKeys) {
     try {
       overrideProps(fiber, [key], currentProps[key]);
     } catch {}
@@ -1421,15 +1433,50 @@ export const replayComponent = async (fiber: Fiber): Promise<void> => {
   const currentState = getCurrentFiberState(fiber);
   if (currentState) {
     const stateNames = getStateNames(fiber);
+
+    // First, handle named state hooks
     for (const [key, value] of Object.entries(currentState)) {
       try {
         const namedStateIndex = stateNames.indexOf(key);
-        const hookId = namedStateIndex !== -1 ? namedStateIndex.toString() : '0';
-        overrideHookState(fiber, hookId, [], value);
+        if (namedStateIndex !== -1) {
+          const hookId = namedStateIndex.toString();
+          // For arrays and objects, we need to clone to trigger updates
+          const stateValue = Array.isArray(value)
+            ? [...value]
+            : typeof value === 'object' && value !== null
+              ? { ...value }
+              : value;
+          overrideHookState(fiber, hookId, [], stateValue);
+        }
       } catch {}
+    }
+
+    // Then handle unnamed state hooks
+    let hookIndex = 0;
+    let currentHook = fiber.memoizedState;
+    while (currentHook !== null) {
+      try {
+        const hookId = hookIndex.toString();
+        const value = currentHook.memoizedState;
+
+        // Only update if this hook isn't already handled by named states
+        if (!stateNames.includes(hookId)) {
+          // For arrays and objects, we need to clone to trigger updates
+          const stateValue = Array.isArray(value)
+            ? [...value]
+            : typeof value === 'object' && value !== null
+              ? { ...value }
+              : value;
+          overrideHookState(fiber, hookId, [], stateValue);
+        }
+      } catch {}
+
+      currentHook = currentHook.next as typeof currentHook;
+      hookIndex++;
     }
   }
 
+  // Recursively handle children
   let child = fiber.child;
   while (child) {
     await replayComponent(child);

@@ -27,6 +27,9 @@ interface ReactContext<T = unknown> {
 const stateChangeCounts = new Map<string, number>();
 const propsChangeCounts = new Map<string, number>();
 const contextChangeCounts = new Map<string, number>();
+const stateChanges = new Set<string>();
+const propsChanges = new Set<string>();
+const contextChanges = new Set<string>();
 let lastRenderedStates = new WeakMap<Fiber, Record<string, unknown>>();
 
 const STATE_NAME_REGEX = /\[(?<name>\w+),\s*set\w+\]/g;
@@ -38,7 +41,6 @@ export const isPromise = (value: unknown): value is Promise<unknown> => {
     (value instanceof Promise || (typeof value === 'object' && 'then' in value))
   );
 };
-
 export const ensureRecord = (
   value: unknown,
   maxDepth = 2,
@@ -232,15 +234,11 @@ export const resetStateTracking = () => {
   stateChangeCounts.clear();
   propsChangeCounts.clear();
   contextChangeCounts.clear();
-  lastRenderedStates = new WeakMap<Fiber, Record<string, unknown>>();
+  stateChanges.clear();
+  propsChanges.clear();
+  contextChanges.clear();
+  lastRenderedStates = new WeakMap();
 };
-
-export const getStateChangeCount = (name: string): number =>
-  stateChangeCounts.get(name) ?? 0;
-export const getPropsChangeCount = (name: string): number =>
-  propsChangeCounts.get(name) ?? 0;
-export const getContextChangeCount = (name: string): number =>
-  contextChangeCounts.get(name) ?? 0;
 
 export const getStateNames = (fiber: Fiber): Array<string> => {
   const componentSource = fiber.type?.toString?.() || '';
@@ -420,9 +418,10 @@ const getPropsOrder = (fiber: Fiber): Array<string> => {
     .filter(Boolean);
 };
 
-interface SectionData {
+export interface SectionData {
   current: Record<string, unknown>;
   changes: Set<string>;
+  changesCounts: Map<string, number>;
 }
 
 export interface InspectorData {
@@ -434,20 +433,43 @@ export interface InspectorData {
 export const collectInspectorData = (fiber: Fiber): InspectorData => {
   if (!fiber) {
     return {
-      fiberProps: { current: {}, changes: new Set() },
-      fiberState: { current: {}, changes: new Set() },
-      fiberContext: { current: {}, changes: new Set() },
+      fiberProps: {
+        current: {},
+        changes: new Set(),
+        changesCounts: new Map<string, number>(),
+      },
+      fiberState: {
+        current: {},
+        changes: new Set(),
+        changesCounts: new Map<string, number>(),
+      },
+      fiberContext: {
+        current: {},
+        changes: new Set(),
+        changesCounts: new Map<string, number>(),
+      },
     };
   }
 
   const fiberProps = {
     current: {} as Record<string, unknown>,
-    changes: new Set<string>(),
+    changes: propsChanges,
+    changesCounts: new Map<string, number>(),
   };
 
   if (fiber.memoizedProps) {
+    const propsOrder = getPropsOrder(fiber);
+    const orderedProps = propsOrder.length
+      ? [
+          ...propsOrder,
+          ...Object.keys(fiber.memoizedProps).filter(
+            (key) => !propsOrder.includes(key),
+          ),
+        ]
+      : Object.keys(fiber.memoizedProps);
+
     const currentIsNewer = fiber?.alternate
-      ? (fiber.actualStartTime ?? 0) > (fiber.alternate?.actualStartTime ?? 0)
+      ? (fiber.actualStartTime ?? 0) > (fiber.alternate.actualStartTime ?? 0)
       : true;
 
     const baseProps = currentIsNewer
@@ -456,36 +478,9 @@ export const collectInspectorData = (fiber: Fiber): InspectorData => {
         fiber.alternate?.pendingProps ||
         fiber.memoizedProps;
 
-    const orderedProps = getPropsOrder(fiber);
-    const remainingProps = new Set(Object.keys(baseProps));
-
     for (const key of orderedProps) {
-      if (key in baseProps) {
-        const value = baseProps[key];
-        fiberProps.current[key] = isPromise(value)
-          ? { type: 'promise', displayValue: 'Promise' }
-          : value;
-
-        if (
-          (value && typeof value === 'object') ||
-          typeof value === 'function'
-        ) {
-          if (fiber.alternate?.memoizedProps) {
-            const prevValue = fiber.alternate.memoizedProps[key];
-            const status = value === prevValue ? 'memoized' : 'unmemoized';
-            propsChangeCounts.set(`${key}:${status}`, 0);
-          }
-        }
-        remainingProps.delete(key);
-      }
-    }
-
-    for (const key of remainingProps) {
       const value = baseProps[key];
-      fiberProps.current[key] = isPromise(value)
-        ? { type: 'promise', displayValue: 'Promise' }
-        : value;
-
+      fiberProps.current[key] = value;
       if ((value && typeof value === 'object') || typeof value === 'function') {
         if (fiber.alternate?.memoizedProps) {
           const prevValue = fiber.alternate.memoizedProps[key];
@@ -495,8 +490,12 @@ export const collectInspectorData = (fiber: Fiber): InspectorData => {
       }
     }
 
-    const currentProps = fiber.memoizedProps;
-    for (const [key, currentValue] of Object.entries(currentProps)) {
+    for (const key of orderedProps) {
+      const currentValue = fiber.memoizedProps[key];
+      fiberProps.current[key] = isPromise(currentValue)
+        ? { type: 'promise', displayValue: 'Promise' }
+        : currentValue;
+
       if (
         (currentValue && typeof currentValue === 'object') ||
         typeof currentValue === 'function'
@@ -504,26 +503,35 @@ export const collectInspectorData = (fiber: Fiber): InspectorData => {
         if (fiber.alternate?.memoizedProps) {
           const prevValue = fiber.alternate.memoizedProps[key];
           const status = currentValue === prevValue ? 'memoized' : 'unmemoized';
-          fiberProps.changes.add(`${key}:${status}`);
+          propsChanges.add(`${key}:${status}`);
         }
         continue;
       }
 
-      if (
-        fiber.alternate?.memoizedProps &&
-        key in fiber.alternate.memoizedProps &&
-        !isEqual(fiber.alternate.memoizedProps[key], currentValue)
-      ) {
-        fiberProps.changes.add(key);
-        const count = (propsChangeCounts.get(key) || 0) + 1;
-        propsChangeCounts.set(key, count);
+      if (fiber.alternate?.memoizedProps) {
+        if (!isEqual(fiber.alternate.memoizedProps[key], currentValue)) {
+          if (propsChanges.has(key)) {
+            propsChanges.add(key);
+            const count = (propsChangeCounts.get(key) || 0) + 1;
+            propsChangeCounts.set(key, count);
+          } else {
+            propsChanges.add(key);
+            propsChangeCounts.set(key, 0);
+          }
+        }
+      } else {
+        propsChanges.add(key);
+        propsChangeCounts.set(key, 0);
       }
     }
   }
 
+  fiberProps.changesCounts = new Map(propsChangeCounts);
+
   const fiberState = {
     current: {} as Record<string, unknown>,
-    changes: new Set<string>(),
+    changes: stateChanges,
+    changesCounts: stateChangeCounts,
   };
 
   if (fiber.tag === FunctionComponentTag && isDirectComponent(fiber)) {
@@ -573,9 +581,12 @@ export const collectInspectorData = (fiber: Fiber): InspectorData => {
     }
   }
 
+  fiberState.changesCounts = new Map(stateChangeCounts);
+
   const fiberContext = {
     current: {} as Record<string, unknown>,
-    changes: new Set<string>(),
+    changes: contextChanges,
+    changesCounts: new Map<string, number>(),
   };
 
   const contexts = getAllFiberContexts(fiber);
@@ -613,6 +624,8 @@ export const collectInspectorData = (fiber: Fiber): InspectorData => {
       }
     }
   }
+
+  fiberContext.changesCounts = new Map(contextChangeCounts);
 
   return {
     fiberProps,
