@@ -25,7 +25,7 @@ import {
 import type { RenderData } from '~core/utils';
 import { getChangedPropsDetailed } from '~web/components/inspector/utils';
 import { readLocalStorage, removeLocalStorage } from '~web/utils/helpers';
-import { logIntro } from '~web/utils/log';
+import { log, logIntro } from '~web/utils/log';
 import {
   OUTLINE_ARRAY_SIZE,
   drawCanvas,
@@ -515,7 +515,7 @@ export const isValidFiber = (fiber: Fiber) => {
 export const initReactScanInstrumentation = () => {
   if (hasStopped()) return;
   // todo: don't hardcode string getting weird ref error in iife when using process.env
-  const instrumentation = createInstrumentation(`react-scan-devtools-0.1.0`, {
+  const instrumentation = createInstrumentation('react-scan-devtools-0.1.0', {
     onCommitStart: () => {
       ReactScanInternals.options.value.onCommitStart?.();
     },
@@ -550,7 +550,7 @@ export const initReactScanInstrumentation = () => {
       if (!isOverlayPaused) {
         outlineFiber(fiber);
       }
-      
+
       if (ReactScanInternals.options.value.log) {
         // this can be expensive given enough re-renders
         log(renders);
