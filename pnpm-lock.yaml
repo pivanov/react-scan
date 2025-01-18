@@ -132,8 +132,8 @@ importers:
         specifier: ^1.4.0
         version: 1.4.1(@remix-run/react@2.15.0(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(typescript@5.7.3))(next@15.0.3(@babel/core@7.26.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0)
       bippy:
-        specifier: 0.2.12
-        version: 0.2.12
+        specifier: 0.2.13
+        version: 0.2.13
       react:
         specifier: 19.0.0
         version: 19.0.0
@@ -184,8 +184,8 @@ importers:
         specifier: ^20.17.9
         version: 20.17.10
       bippy:
-        specifier: ^0.2.12
-        version: 0.2.12
+        specifier: 0.2.13
+        version: 0.2.13
       esbuild:
         specifier: ^0.24.0
         version: 0.24.0
@@ -2124,8 +2124,8 @@ packages:
   bippy@0.0.19:
     resolution: {integrity: sha512-xZ9JKYOkgtLjOVPo/wi7oU8JlDi9zIHwatG2zfuTMSCES3m+tf8XiCSBYUdQk2oIdn0AA2xsVtiIfI6z32TZ5g==}
 
-  bippy@0.2.12:
-    resolution: {integrity: sha512-7ZR7E0Typo/2UEFt1FeZXu+6yuIDhvJZq+QHRgxjhDKgkXM1+ftRhdq7CvkVJAdujVJ+sqjusq0Dmb2uMdXZhg==}
+  bippy@0.2.13:
+    resolution: {integrity: sha512-jRbv+qFWdSgFX8lqxM3yBsiv3IWK2/oMTZbzPofyNmIgzPpqZm6I34tzJtRU8jQDrNRkKqZCq1ApKL4FGvMW6Q==}
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -6799,7 +6799,7 @@ snapshots:
 
   bippy@0.0.19: {}
 
-  bippy@0.2.12: {}
+  bippy@0.2.13: {}
 
   bl@4.1.0:
     dependencies:
