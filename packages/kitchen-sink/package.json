@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@vercel/analytics": "^1.4.0",
-    "bippy": "^0.0.21",
+    "bippy": "0.2.12",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-scan": "^0.0.34",

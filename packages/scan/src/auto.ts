@@ -1,10 +1,14 @@
-import { scan } from './index';
+import { Options, scan } from './index';
 import { init } from './install-hook';
 
 init();
 
 if (typeof window !== 'undefined') {
-  scan();
+  let options: Partial<Options> = {};
+  if (!document.currentScript) {
+    options.dangerouslyForceRunInProduction = true;
+  }
+  scan(options);
   window.reactScan = scan;
 }
 
