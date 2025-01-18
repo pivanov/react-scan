@@ -5,11 +5,20 @@ init();
 
 if (typeof window !== 'undefined') {
   let options: Partial<Options> = {};
-  if (!document.currentScript) {
+  const isPastingInConsole = !document.currentScript;
+  if (isPastingInConsole) {
     options.dangerouslyForceRunInProduction = true;
   }
+  console.log('scanning');
+
   scan(options);
   window.reactScan = scan;
+
+  if (isPastingInConsole) {
+    console.warn(
+      '[React Scan]: Detected script was pasted through devtools console',
+    );
+  }
 }
 
 export * from './core';

@@ -513,26 +513,14 @@ export const isValidFiber = (fiber: Fiber) => {
 
   return true;
 };
-export const initReactScanInstrumentation = () => {
+export const initReactScanInstrumentation = ({onActive}:{onActive?:() => void}) => {
   if (hasStopped()) return;
   // todo: don't hardcode string getting weird ref error in iife when using process.env
   const instrumentation = createInstrumentation(`react-scan-devtools-0.1.0`, {
     onCommitStart() {
       ReactScanInternals.options.value.onCommitStart?.();
     },
-    onActive() {
-      if (hasStopped()) return;
-
-      const host = getCanvasEl();
-      if (host) {
-        document.documentElement.appendChild(host);
-      }
-      globalThis.__REACT_SCAN__ = {
-        ReactScanInternals,
-      };
-      startReportInterval();
-      logIntro();
-    },
+    onActive,
     onError() {
       // todo: ingest errors without accidentally collecting data about user
     },
