@@ -23,6 +23,10 @@ import {
   getStateChanges,
 } from '~core/instrumentation';
 import type { RenderData } from '~core/utils';
+import {
+  inspectorState,
+  inspectorUpdateSignal,
+} from '~web/components/inspector/states';
 import { getChangedPropsDetailed } from '~web/components/inspector/utils';
 import { readLocalStorage, removeLocalStorage } from '~web/utils/helpers';
 import { log } from '~web/utils/log';
@@ -558,6 +562,16 @@ export const initReactScanInstrumentation = () => {
       if (!isInspectorInactive) {
         reportRenderToListeners(fiber);
       }
+
+      if (
+        ReactScanInternals.options.value.showToolbar !== false &&
+        Store.inspectState.value.kind === 'focused' &&
+        (!inspectorState.value.fiber ||
+          inspectorState.value.fiber?.type === fiber.type)
+      ) {
+        inspectorUpdateSignal.value = Date.now();
+      }
+
       ReactScanInternals.options.value.onRender?.(fiber, renders);
     },
     onCommitFinish: () => {
