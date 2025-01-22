@@ -9,7 +9,6 @@ if (typeof window !== 'undefined') {
   if (isPastingInConsole) {
     options.dangerouslyForceRunInProduction = true;
   }
-  console.log('scanning');
 
   scan(options);
   window.reactScan = scan;

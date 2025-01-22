@@ -184,8 +184,8 @@ importers:
         specifier: ^20.17.9
         version: 20.17.10
       bippy:
-        specifier: ^0.2.18
-        version: 0.2.18
+        specifier: ^0.2.23
+        version: 0.2.23(@types/react@18.3.12)(react@18.2.0)
       esbuild:
         specifier: ^0.24.0
         version: 0.24.0
@@ -1689,6 +1689,11 @@ packages:
   '@types/react-dom@18.0.9':
     resolution: {integrity: sha512-qnVvHxASt/H7i+XG1U1xMiY5t+IHcPGUK7TDMDzom08xa7e86eCeKOiLZezwCKVxJn6NEiiy2ekgX8aQssjIKg==}
 
+  '@types/react-reconciler@0.28.9':
+    resolution: {integrity: sha512-HHM3nxyUZ3zAylX8ZEyrDNd2XZOnQ0D5XfunJF5FLQnZbHHYq4UWvW1QfelQNXv1ICNkwYhfxjwfnqivYB6bFg==}
+    peerDependencies:
+      '@types/react': '*'
+
   '@types/react-router@5.1.20':
     resolution: {integrity: sha512-jGjmu/ZqS7FjSH6owMcD5qpq19+1RS9DeVRqfl1FeBMxTDQAGwlMWOcs52NDoXaNKyG3d1cYQFMs9rCrb88o9Q==}
 
@@ -2127,8 +2132,10 @@ packages:
   bippy@0.2.17:
     resolution: {integrity: sha512-8z5gEvtv/tHWxEM3PDW0HgPu3IW60BIG+LxjgLwLPTtAcOrvTlncEgdvJSBhjTRVD2Xw32j0+prjXwd7zC0Q8g==}
 
-  bippy@0.2.18:
-    resolution: {integrity: sha512-F39FpHa85aMWAF0DZYYGUrwn7gHheHTrLL0xKkuO9NEF/OJT4B0fwnJOjZLm0/8+JmywAx1iZY7XwQlJNmfqbQ==}
+  bippy@0.2.23:
+    resolution: {integrity: sha512-iwhRQdkqAW6UcIF7t85Bv9BWgNrW72z4f2nVK+KZrAslYHVDVPmDcPDb8XVxlArQjRrRwJ1rwldeFCnpbd3B5Q==}
+    peerDependencies:
+      react: '>=17.0.1'
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -6205,6 +6212,10 @@ snapshots:
     dependencies:
       '@types/react': 18.3.12
 
+  '@types/react-reconciler@0.28.9(@types/react@18.3.12)':
+    dependencies:
+      '@types/react': 18.3.12
+
   '@types/react-router@5.1.20':
     dependencies:
       '@types/history': 4.7.11
@@ -6804,7 +6815,12 @@ snapshots:
 
   bippy@0.2.17: {}
 
-  bippy@0.2.18: {}
+  bippy@0.2.23(@types/react@18.3.12)(react@18.2.0):
+    dependencies:
+      '@types/react-reconciler': 0.28.9(@types/react@18.3.12)
+      react: 18.2.0
+    transitivePeerDependencies:
+      - '@types/react'
 
   bl@4.1.0:
     dependencies:

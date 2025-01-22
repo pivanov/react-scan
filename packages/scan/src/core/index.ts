@@ -597,14 +597,10 @@ export const scan = (options: Options = {}) => {
   const isInIframe = Store.isInIframe.value;
 
   if (isInIframe) {
-    console.log('returning');
-
     return;
   }
 
   if (options.enabled === false && options.showToolbar !== true) {
-    console.log('nope');
-
     return;
   }
 
