@@ -1,4 +1,9 @@
-import type { Fiber, FiberRoot, ReactRenderer } from 'bippy';
+import type {
+  Fiber,
+  FiberRoot,
+  ReactDevToolsGlobalHook,
+  ReactRenderer,
+} from 'bippy';
 
 type ReactScanInternals = typeof import('./core/index')['ReactScanInternals'];
 type Scan = typeof import('./index')['scan'];
@@ -27,25 +32,6 @@ declare global {
   interface Window {
     isReactScanExtension?: boolean;
     reactScan: Scan;
-    __REACT_SCAN_TOOLBAR_CONTAINER__?: HTMLDivElement
-
-    __REACT_DEVTOOLS_GLOBAL_HOOK__?: {
-      checkDCE: (fn: unknown) => void;
-      supportsFiber: boolean;
-      supportsFlight: boolean;
-      renderers: Map<number, ExtendedReactRenderer>;
-      hasUnsupportedRendererAttached: boolean;
-      onCommitFiberRoot: (
-        rendererID: number,
-        root: FiberRoot,
-        // biome-ignore lint/suspicious/noConfusingVoidType: may or may not exist
-        priority: void | number,
-      ) => void;
-      onCommitFiberUnmount: (rendererID: number, fiber: Fiber) => void;
-      onPostCommitFiberRoot: (rendererID: number, root: FiberRoot) => void;
-      inject: (renderer: ExtendedReactRenderer) => number;
-      _instrumentationSource?: string;
-      _instrumentationIsActive?: boolean;
-    };
+    __REACT_SCAN_TOOLBAR_CONTAINER__?: HTMLDivElement;
   }
 }

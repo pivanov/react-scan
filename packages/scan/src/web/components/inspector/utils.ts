@@ -53,8 +53,10 @@ interface ReactInternalProps {
 
 export const getFiberFromElement = (element: Element): Fiber | null => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
-    const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__ as ReactDevToolsGlobalHook;
-    if (!hook.renderers) return null;
+    const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+    if (!hook?.renderers) {
+      return null;
+    }
     for (const [, renderer] of Array.from(hook.renderers)) {
       try {
         const fiber = renderer.findFiberByHostInstance?.(element);
@@ -290,9 +292,10 @@ export const getOverrideMethods = (): OverrideMethods => {
   let overrideHookState = null;
 
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
-    const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__ as ReactDevToolsGlobalHook;
-    if (!hook.renderers)
+    const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+    if (!hook?.renderers) {
       return { overrideProps: null, overrideHookState: null };
+    }
 
     for (const [_, renderer] of Array.from(hook.renderers)) {
       try {
