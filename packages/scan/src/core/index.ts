@@ -16,7 +16,6 @@ import { ICONS } from '~web/assets/svgs/svgs';
 import type { States } from '~web/components/inspector/utils';
 import { createToolbar, scriptLevelToolbar } from '~web/toolbar';
 import { readLocalStorage, saveLocalStorage } from '~web/utils/helpers';
-import { logIntro } from '~web/utils/log';
 import type { Outline } from '~web/utils/outline';
 import type {
   ChangeReason,
