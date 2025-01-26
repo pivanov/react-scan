@@ -21,7 +21,11 @@ import {
 } from 'bippy';
 import { isValidElement } from 'preact';
 import { isEqual } from '~core/utils';
-import { getChangedPropsDetailed } from '~web/components/inspector/utils';
+import {
+  collectContextChanges,
+  collectPropsChanges,
+  collectStateChanges,
+} from '~web/components/inspector/timeline/utils';
 import {
   RENDER_PHASE_STRING_TO_ENUM,
   type RenderPhase,
@@ -453,7 +457,7 @@ export const createInstrumentation = (
           root.current,
           (fiber: Fiber, phase: 'mount' | 'update' | 'unmount') => {
             const type = getType(fiber.type);
-            if (!type) return;
+            if (!type) return null;
 
             const allInstances = getAllInstances();
             const validInstancesIndicies: Array<number> = [];
@@ -462,18 +466,56 @@ export const createInstrumentation = (
               if (!instance.config.isValidFiber(fiber)) continue;
               validInstancesIndicies.push(i);
             }
-            if (!validInstancesIndicies.length) return;
+            if (!validInstancesIndicies.length) return null;
 
             const changes: Array<Change> = [];
 
             if (allInstances.some((instance) => instance.config.trackChanges)) {
-              const propsChanges = getChangedPropsDetailed(fiber);
-              const stateChanges = getStateChanges(fiber);
-              const contextChanges = getContextChanges(fiber);
+              const { changes: changesProps } = collectPropsChanges(fiber);
+              const { changes: changesState } = collectStateChanges(fiber);
+              const { changes: changesContext } = collectContextChanges(fiber);
 
-              changes.push.apply(changes, propsChanges);
-              changes.push.apply(changes, stateChanges);
-              changes.push.apply(changes, contextChanges);
+              // Convert props changes
+              changes.push(
+                ...changesProps.map(
+                  (change) =>
+                    ({
+                      type: ChangeReason.Props,
+                      name: change.name,
+                      value: change.value,
+                    }) as Change,
+                ),
+              );
+
+              // Convert state changes
+              for (const change of changesState) {
+                if (fiber.tag === ClassComponentTag) {
+                  changes.push({
+                    type: ChangeReason.ClassState,
+                    name: change.name.toString(),
+                    value: change.value,
+                  } as Change);
+                } else {
+                  changes.push({
+                    type: ChangeReason.FunctionalState,
+                    name: change.name.toString(),
+                    value: change.value,
+                  } as Change);
+                }
+              }
+
+              // Convert context changes
+              changes.push(
+                ...changesContext.map(
+                  (change) =>
+                    ({
+                      type: ChangeReason.Context,
+                      name: change.name,
+                      value: change.value,
+                      contextType: Number(change.contextType),
+                    }) as Change,
+                ),
+              );
             }
             const { selfTime } = getTimings(fiber);
 
@@ -485,9 +527,12 @@ export const createInstrumentation = (
               changes,
               time: selfTime,
               forget: hasMemoCache(fiber),
+              // todo: allow this to be toggle-able through toolbar
+              // todo: performance optimization: if the last fiber measure was very off screen, do not run isRenderUnnecessary
               unnecessary: TRACK_UNNECESSARY_RENDERS
                 ? isRenderUnnecessary(fiber)
                 : null,
+
               didCommit: didFiberCommit(fiber),
               fps,
             };

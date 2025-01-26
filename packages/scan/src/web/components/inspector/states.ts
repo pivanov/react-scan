@@ -2,7 +2,7 @@ import { signal } from '@preact/signals';
 import type { Fiber } from 'bippy';
 import type { ComponentType } from 'preact';
 import { flashManager } from './flash-overlay';
-import { type SectionData, resetStateTracking } from './overlay/utils';
+import { type SectionData, resetTracking } from './timeline/utils';
 
 export interface MinimalFiberInfo {
   id?: string | number;
@@ -85,15 +85,6 @@ export const timelineActions = {
     const { updates, totalUpdates, currentIndex, isViewingHistory } =
       timelineState.value;
 
-    // const hasChanges =
-    //   update.props.changes.size > 0 ||
-    //   update.state.changes.size > 0 ||
-    //   update.context.changes.size > 0;
-
-    // if (!hasChanges && updates.length > 0) {
-    //   return;
-    // }
-
     const newUpdates = [...updates];
     const newTotalUpdates = totalUpdates + 1;
 
@@ -145,7 +136,7 @@ export const globalInspectorState = {
     globalInspectorState.lastRendered.clear();
     globalInspectorState.expandedPaths.clear();
     flashManager.cleanupAll();
-    resetStateTracking();
+    resetTracking();
     timelineState.value = timelineStateDefault;
   },
 };

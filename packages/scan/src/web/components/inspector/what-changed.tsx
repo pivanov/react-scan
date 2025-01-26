@@ -15,10 +15,9 @@ import { cn } from '~web/utils/helpers';
 import { throttle } from '~web/utils/helpers';
 import { StickySection } from '../sticky-section';
 import { DiffValueView } from './diff-value';
-import { isPromise } from './overlay/utils';
 import { type MinimalFiberInfo, timelineState } from './states';
 import { Timeline } from './timeline';
-import { formatFunctionPreview, formatPath, getObjectDiff } from './utils';
+import { formatFunctionPreview, formatPath, getObjectDiff, isPromise } from './utils';
 
 export type Setter<T> = Dispatch<StateUpdater<T>>;
 
@@ -71,13 +70,11 @@ export const WhatChangedSection = memo(() => {
 
       const { currentIndex, updates } = state;
 
-      // Only reset when going back to initial state
       if (currentIndex === 0) {
         setShouldShowChanges(false);
         return;
       }
 
-      // Only set to true if we detect changes
       if (updates.length > 0) {
         if (!refShowTimeline.current) {
           refShowTimeline.current = true;

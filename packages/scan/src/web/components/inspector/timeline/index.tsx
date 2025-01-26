@@ -70,7 +70,6 @@ export const Timeline = memo(({
     timelineActions.hideTimeline();
   }, []);
 
-  // If instrumentation is not active, don't render anything
   if (!isInstrumentationActive()) {
     return null;
   }

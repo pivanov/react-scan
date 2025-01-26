@@ -16,15 +16,13 @@ function TodoInput({
   value: string;
   onChange: (value: string) => void;
   onAdd: () => void;
-}) {
-  const [inputInternal, setInputInternal] = useState('');
+  }) {
   return (
     <div className="mb-4 flex gap-2">
       <input
         type="text"
         value={input}
         onChange={(e) => {
-          setInputInternal(e.target.value);
           setInput(e.target.value)
         }}
         onKeyDown={(e) => e.key === 'Enter' && addTodo()}

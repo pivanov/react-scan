@@ -1,5 +1,4 @@
 import type { Fiber } from 'bippy';
-import { didFiberCommit } from 'bippy';
 import { Component } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import { Store } from '~core/index';
@@ -9,17 +8,13 @@ import { constant } from '~web/utils/preact/constant';
 import { Icon } from '../icon';
 import { StickySection } from '../sticky-section';
 import { flashManager } from './flash-overlay';
-import {
-  collectInspectorData,
-  getStateNames,
-  resetStateTracking,
-} from './overlay/utils';
 import { PropertySection } from './propeties';
 import {
   type TimelineUpdate,
   inspectorUpdateSignal,
   timelineActions,
 } from './states';
+import { collectInspectorData, getStateNames, resetTracking } from './timeline/utils';
 import { extractMinimalFiberInfo, getCompositeFiberFromElement } from './utils';
 import { WhatChangedSection } from './what-changed';
 
@@ -30,7 +25,7 @@ export const globalInspectorState = {
     globalInspectorState.lastRendered.clear();
     globalInspectorState.expandedPaths.clear();
     flashManager.cleanupAll();
-    resetStateTracking();
+    resetTracking();
     timelineActions.reset();
   },
 };
@@ -80,42 +75,27 @@ class InspectorErrorBoundary extends Component {
 export const Inspector = constant(() => {
   const refInspector = useRef<HTMLDivElement>(null);
   const refLastInspectedFiber = useRef<Fiber | null>(null);
-  const refPendingUpdates = useRef<Set<Fiber>>(new Set<Fiber>());
   const isSettingsOpen = signalIsSettingsOpen.value;
 
   useEffect(() => {
-    const processUpdate = () => {
-      if (refPendingUpdates.current.size === 0) return;
-
-      const fiber = Array.from(refPendingUpdates.current)[0];
-      refPendingUpdates.current.clear();
+    const processUpdate = (fiber: Fiber) => {
+      if (!fiber) return;
 
       refLastInspectedFiber.current = fiber;
-      const inspectorData = collectInspectorData(fiber);
+      const { data: inspectorData, shouldUpdate } = collectInspectorData(fiber);
 
-      const update: TimelineUpdate = {
-        timestamp: Date.now(),
-        fiberInfo: extractMinimalFiberInfo(fiber),
-        props: inspectorData.fiberProps,
-        state: inspectorData.fiberState,
-        context: inspectorData.fiberContext,
-        stateNames: getStateNames(fiber),
-      };
+      if (shouldUpdate) {
+        const update: TimelineUpdate = {
+          timestamp: Date.now(),
+          fiberInfo: extractMinimalFiberInfo(fiber),
+          props: inspectorData.fiberProps,
+          state: inspectorData.fiberState,
+          context: inspectorData.fiberContext,
+          stateNames: getStateNames(fiber),
+        };
 
-      timelineActions.addUpdate(update, fiber);
-
-      if (refPendingUpdates.current.size > 0) {
-        queueMicrotask(processUpdate);
+        timelineActions.addUpdate(update, fiber);
       }
-    };
-
-    let count = -1;
-    const scheduleUpdate = (fiber: Fiber) => {
-      queueMicrotask(() => {
-        console.log(++count);
-        refPendingUpdates.current.add(fiber);
-        queueMicrotask(processUpdate);
-      });
     };
 
     const unSubState = Store.inspectState.subscribe((state) => {
@@ -139,16 +119,14 @@ export const Inspector = constant(() => {
 
       if (isNewComponent) {
         refLastInspectedFiber.current = parentCompositeFiber;
-        refPendingUpdates.current.clear();
         globalInspectorState.cleanup();
-        scheduleUpdate(parentCompositeFiber);
+        processUpdate(parentCompositeFiber);
       }
     });
 
     const unSubInspectorUpdate = inspectorUpdateSignal.subscribe(() => {
       const inspectState = Store.inspectState.value;
       if (inspectState.kind !== 'focused' || !inspectState.focusedDomElement) {
-        refPendingUpdates.current.clear();
         refLastInspectedFiber.current = null;
         globalInspectorState.cleanup();
         return;
@@ -164,10 +142,9 @@ export const Inspector = constant(() => {
         return;
       }
 
-      scheduleUpdate(parentCompositeFiber);
+      processUpdate(parentCompositeFiber);
 
       if (!element.isConnected) {
-        refPendingUpdates.current.clear();
         refLastInspectedFiber.current = null;
         globalInspectorState.cleanup();
         Store.inspectState.value = {
@@ -180,7 +157,6 @@ export const Inspector = constant(() => {
     return () => {
       unSubState();
       unSubInspectorUpdate();
-      refPendingUpdates.current.clear();
       globalInspectorState.cleanup();
     };
   }, []);

@@ -23,6 +23,7 @@ import {
   getBestCorner,
 } from './helpers';
 import { ResizeHandle } from './resize-handle';
+// import { Search } from './search';
 import { Toolbar } from './toolbar';
 
 export const Widget = () => {
@@ -391,8 +392,14 @@ export const Widget = () => {
                 'overflow-y-scroll overflow-x-hidden',
               )}
             >
-              {Store.inspectState.value.kind === 'focused' && <Inspector />}
-              {/* <Settings /> */}
+              {
+                Store.inspectState.value.kind === 'focused' && (
+                  <>
+                    <Inspector />
+                    {/* <Search /> */}
+                  </>
+                )
+              }
             </div>
           </div>
 

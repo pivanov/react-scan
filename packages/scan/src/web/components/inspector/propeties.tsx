@@ -14,7 +14,6 @@ import { useMergedRefs } from '~web/hooks/use-merged-refs';
 import { cn, tryOrElse } from '~web/utils/helpers';
 import { globalInspectorState } from '.';
 import { flashManager } from './flash-overlay';
-import { isPromise } from './overlay/utils';
 import { timelineState } from './states';
 import {
   detectValueType,
@@ -25,6 +24,7 @@ import {
   getPath,
   isEditableValue,
   isExpandable,
+  isPromise,
   sanitizeString,
   updateNestedValue,
 } from './utils';

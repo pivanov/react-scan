@@ -198,7 +198,6 @@ export interface StoreType {
   fiberRoots: WeakSet<Fiber>;
   reportData: Map<number, RenderData>;
   legacyReportData: Map<string, RenderData>;
-  changesListeners: Map<number, Array<ChangesListener>>;
 }
 
 export type OutlineKey = `${string}-${string}`;
@@ -272,7 +271,6 @@ export const Store: StoreType = {
   reportData: new Map<number, RenderData>(),
   legacyReportData: new Map<string, RenderData>(),
   lastReportTime: signal(0),
-  changesListeners: new Map<number, Array<ChangesListener>>(),
 };
 
 export const ReactScanInternals: Internals = {
