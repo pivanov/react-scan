@@ -6,10 +6,10 @@ import { createReactNotAvailableUI, toggleReactIsNotAvailable } from './react-is
 window.reactScan = reactScan.setOptions;
 
 reactScan.scan({
-  enabled: false,
+  enabled: true,
   showToolbar: true,
+  dangerouslyForceRunInProduction: true,
 });
-
 
 window.addEventListener('DOMContentLoaded', async () => {
   if (!canLoadReactScan) {

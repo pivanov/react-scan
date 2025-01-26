@@ -26,7 +26,7 @@ import type { RenderData } from '~core/utils';
 import { inspectorUpdateSignal } from '~web/components/inspector/states';
 import { getChangedPropsDetailed } from '~web/components/inspector/utils';
 import { readLocalStorage, removeLocalStorage } from '~web/utils/helpers';
-import { log } from '~web/utils/log';
+import { log, logIntro } from '~web/utils/log';
 import {
   OUTLINE_ARRAY_SIZE,
   drawCanvas,
@@ -560,10 +560,7 @@ export const initReactScanInstrumentation = () => {
         reportRenderToListeners(fiber);
       }
 
-      if (
-        ReactScanInternals.options.value.showToolbar !== false &&
-        Store.inspectState.value.kind === 'focused'
-      ) {
+      if (Store.inspectState.value.kind === 'focused') {
         inspectorUpdateSignal.value = Date.now();
       }
 

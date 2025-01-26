@@ -1,4 +1,4 @@
-import { type Fiber, getDisplayName, getFiberId } from 'bippy';
+import { type Fiber, getDisplayName } from 'bippy';
 import { useEffect, useRef } from 'preact/hooks';
 import { ReactScanInternals, Store } from '~core/index';
 import {
@@ -11,6 +11,7 @@ import {
 import { signalIsSettingsOpen } from '~web/state';
 import { cn, throttle } from '~web/utils/helpers';
 import { lerp } from '~web/utils/lerp';
+import { timelineState } from '../states';
 
 type DrawKind = 'locked' | 'inspecting';
 
@@ -99,13 +100,12 @@ export const ScanOverlay = () => {
     fiber: Fiber | null,
   ) => {
     if (!fiber) return;
-    const fiberId = getFiberId(fiber);
 
-    const reportDataFiber = Store.reportData.get(fiberId);
+    const currentUpdate = timelineState.value.updates[timelineState.value.currentIndex];
 
     const stats = {
-      count: reportDataFiber?.count ?? 0,
-      time: reportDataFiber?.time ?? 0,
+      count: timelineState.value.updates.length - 1,
+      time: currentUpdate?.fiberInfo?.selfTime,
     };
 
     const pillHeight = 24;
@@ -113,7 +113,7 @@ export const ScanOverlay = () => {
     const componentName =
       (fiber?.type && getDisplayName(fiber.type)) ?? 'Unknown';
     let text = componentName;
-    if (stats.count) {
+    if (stats.count > 0) {
       text += ` • ×${stats.count}`;
       if (stats.time) {
         text += ` (${stats.time.toFixed(1)}ms)`;

@@ -1,6 +1,7 @@
 import {
   type Fiber,
   getDisplayName,
+  getTimings,
   isCompositeFiber,
   isHostFiber,
   traverseFiber,
@@ -296,7 +297,11 @@ export const getOverrideMethods = (): OverrideMethods => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
     const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (!hook?.renderers) {
-      return { overrideProps: null, overrideHookState: null, overrideContext: null };
+      return {
+        overrideProps: null,
+        overrideHookState: null,
+        overrideContext: null,
+      };
     }
 
     for (const [, renderer] of Array.from(hook.renderers)) {
@@ -418,6 +423,7 @@ export const findComponentDOMNode = (
     const element = fiber.stateNode as HTMLElement;
     if (
       excludeNonVisualTags &&
+      element.tagName &&
       nonVisualTags.has(element.tagName.toLowerCase())
     ) {
       return null;
@@ -1530,7 +1536,6 @@ export const calculateSliderValues = (
   };
 };
 
-
 export const replayComponent = async (fiber: Fiber): Promise<void> => {
   const { overrideProps, overrideHookState, overrideContext } =
     getOverrideMethods();
@@ -1649,9 +1654,14 @@ export const replayComponent = async (fiber: Fiber): Promise<void> => {
   } catch {}
 };
 
-export const extractMinimalFiberInfo = (fiber: Fiber): MinimalFiberInfo => ({
-  displayName: getDisplayName(fiber) || 'Unknown',
-  type: fiber.type,
-  key: fiber.key,
-  id: fiber.index,
-});
+export const extractMinimalFiberInfo = (fiber: Fiber): MinimalFiberInfo => {
+  const timings = getTimings(fiber);
+  return {
+    displayName: getDisplayName(fiber) || 'Unknown',
+    type: fiber.type,
+    key: fiber.key,
+    id: fiber.index,
+    selfTime: timings?.selfTime ?? null,
+    totalTime: timings?.totalTime ?? null,
+  };
+};

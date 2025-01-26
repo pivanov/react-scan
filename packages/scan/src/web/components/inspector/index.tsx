@@ -1,4 +1,5 @@
 import type { Fiber } from 'bippy';
+import { didFiberCommit } from 'bippy';
 import { Component } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import { Store } from '~core/index';
@@ -19,9 +20,8 @@ import {
   inspectorUpdateSignal,
   timelineActions,
 } from './states';
-import { Timeline } from './timeline';
 import { extractMinimalFiberInfo, getCompositeFiberFromElement } from './utils';
-import { WhatChanged } from './what-changed';
+import { WhatChangedSection } from './what-changed';
 
 export const globalInspectorState = {
   lastRendered: new Map<string, unknown>(),
@@ -109,14 +109,17 @@ export const Inspector = constant(() => {
       }
     };
 
+    let count = -1;
     const scheduleUpdate = (fiber: Fiber) => {
-      refPendingUpdates.current.add(fiber);
-      queueMicrotask(processUpdate);
+      queueMicrotask(() => {
+        console.log(++count);
+        refPendingUpdates.current.add(fiber);
+        queueMicrotask(processUpdate);
+      });
     };
 
     const unSubState = Store.inspectState.subscribe((state) => {
       if (state.kind !== 'focused' || !state.focusedDomElement) {
-        refPendingUpdates.current.clear();
         refLastInspectedFiber.current = null;
         globalInspectorState.cleanup();
         return;
@@ -198,12 +201,7 @@ export const Inspector = constant(() => {
           },
         )}
       >
-        <StickySection>
-          {(props) => <Timeline {...props} />}
-        </StickySection>
-        <StickySection>
-          {(props) => <WhatChanged {...props} />}
-        </StickySection>
+        <WhatChangedSection />
         <StickySection>
           {(props) => <PropertySection section="props" {...props} />}
         </StickySection>

@@ -5,10 +5,12 @@ import { flashManager } from './flash-overlay';
 import { type SectionData, resetStateTracking } from './overlay/utils';
 
 export interface MinimalFiberInfo {
-  key: string | null;
   id?: string | number;
-  displayName: string;
+  key: string | null;
   type: ComponentType<unknown> | string;
+  displayName: string;
+  selfTime: number;
+  totalTime: number;
 }
 
 export interface TimelineUpdate {
@@ -82,6 +84,15 @@ export const timelineActions = {
   addUpdate: (update: TimelineUpdate, latestFiber: Fiber | null) => {
     const { updates, totalUpdates, currentIndex, isViewingHistory } =
       timelineState.value;
+
+    // const hasChanges =
+    //   update.props.changes.size > 0 ||
+    //   update.state.changes.size > 0 ||
+    //   update.context.changes.size > 0;
+
+    // if (!hasChanges && updates.length > 0) {
+    //   return;
+    // }
 
     const newUpdates = [...updates];
     const newTotalUpdates = totalUpdates + 1;

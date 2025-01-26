@@ -13,9 +13,11 @@ import { Icon } from '~web/components/icon';
 import type { useMergedRefs } from '~web/hooks/use-merged-refs';
 import { cn } from '~web/utils/helpers';
 import { throttle } from '~web/utils/helpers';
+import { StickySection } from '../sticky-section';
 import { DiffValueView } from './diff-value';
 import { isPromise } from './overlay/utils';
 import { type MinimalFiberInfo, timelineState } from './states';
+import { Timeline } from './timeline';
 import { formatFunctionPreview, formatPath, getObjectDiff } from './utils';
 
 export type Setter<T> = Dispatch<StateUpdater<T>>;
@@ -55,79 +57,108 @@ interface WhatChangedProps {
   | ReturnType<typeof useMergedRefs<HTMLElement>>
   | ((node: HTMLElement | null) => void);
   calculateStickyTop: (removeSticky?: boolean) => void;
+  shouldShowChanges: boolean;
 }
 
-export const WhatChanged = memo(
-  ({ isSticky, refSticky, calculateStickyTop }: WhatChangedProps) => {
-    const [isExpanded, setIsExpanded] = useState(true);
-    const [shouldShowChanges, setShouldShowChanges] = useState(false);
+export const WhatChangedSection = memo(() => {
+  const refShowTimeline = useRef(false);
+  const [shouldShowChanges, setShouldShowChanges] = useState(true);
+  useEffect(() => {
+    const rafId = 0;
 
-    useEffect(() => {
-      const rafId = 0;
+    const unsubscribe = timelineState.subscribe(async (state) => {
+      cancelAnimationFrame(rafId);
 
-      const unsubscribe = timelineState.subscribe(async (state) => {
-        cancelAnimationFrame(rafId);
+      const { currentIndex, updates } = state;
 
-        const { currentIndex, updates } = state;
-        const currentUpdate = updates[currentIndex];
-        const prevUpdate = currentIndex > 0 ? updates[currentIndex - 1] : null;
+      // Only reset when going back to initial state
+      if (currentIndex === 0) {
+        setShouldShowChanges(false);
+        return;
+      }
 
-        const uniqueChanges =
-          (currentUpdate?.props?.changes?.size ?? 0) +
-          (currentUpdate?.state?.changes?.size ?? 0) +
-          (currentUpdate?.context?.changes?.size ?? 0);
+      // Only set to true if we detect changes
+      if (updates.length > 0) {
+        if (!refShowTimeline.current) {
+          refShowTimeline.current = true;
+        }
+        setShouldShowChanges(true);
+      }
+    });
 
-        const shouldShow =
-          currentUpdate?.fiberInfo.type === prevUpdate?.fiberInfo.type &&
-          uniqueChanges > 0;
+    return () => {
+      unsubscribe();
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
+  return (
+    <>
+      {
+        refShowTimeline.current && (
+          <StickySection>
+            {(props) => (
+              <Timeline {...props} />
+            )}
+          </StickySection>
+        )
+      }
+      <StickySection>
+        {(props) => (
+          <WhatChanged
+            {...props}
+            shouldShowChanges={shouldShowChanges}
+          />
+        )}
+      </StickySection>
+    </>
+  );
+});
 
-        setShouldShowChanges(shouldShow);
-      });
+export const WhatChanged = memo(({
+  isSticky,
+  refSticky,
+  calculateStickyTop,
+  shouldShowChanges,
+}: WhatChangedProps) => {
+  const [isExpanded, setIsExpanded] = useState(true);
 
-      return () => {
-        unsubscribe();
-        cancelAnimationFrame(rafId);
-      };
-    }, []);
-
-    return (
-      <>
-        <WhatsChangedHeader
-          refSticky={refSticky}
-          isSticky={isSticky}
-          calculateStickyTop={calculateStickyTop}
-          isExpanded={isExpanded}
-          shouldShowChanges={shouldShowChanges}
-          setIsExpanded={setIsExpanded}
-        />
-        <div
-          className={cn('react-scan-expandable', {
-            'react-scan-expanded': isExpanded,
-          })}
-        >
-          <div className="overflow-hidden">
-            {
-              shouldShowChanges && (
-                <div
-                  className={cn(
-                    'relative',
+  return (
+    <>
+      <WhatsChangedHeader
+        refSticky={refSticky}
+        isSticky={isSticky}
+        calculateStickyTop={calculateStickyTop}
+        isExpanded={isExpanded}
+        shouldShowChanges={shouldShowChanges}
+        setIsExpanded={setIsExpanded}
+      />
+      <div
+        className={cn('react-scan-expandable', {
+          'react-scan-expanded': isExpanded,
+        })}
+      >
+        <div className="overflow-hidden">
+          {
+            shouldShowChanges && (
+              <div
+                className={cn(
+                  'relative',
                   'flex flex-col gap-y-2',
                   'pl-9 pr-2',
-                    'before:content-[""] before:absolute before:inset-x-0 before:bottom-0 before:h-[1px] before:bg-[#333]',
+                  'before:content-[""] before:absolute before:inset-x-0 before:bottom-0 before:h-[1px] before:bg-[#333]',
                 )}
-                >
-                  <Section title="Props" isExpanded={isExpanded} />
-                  <Section title="State" isExpanded={isExpanded} />
-                  <Section title="Context" isExpanded={isExpanded} />
-                </div>
-              )
-            }
-          </div>
+              >
+                <Section title="Props" isExpanded={isExpanded} />
+                <Section title="State" isExpanded={isExpanded} />
+                <Section title="Context" isExpanded={isExpanded} />
+              </div>
+            )
+          }
         </div>
-      </>
-    );
-  },
-);
+      </div>
+    </>
+  );
+});
 
 const renderStateName = (key: string, componentName: string) => {
   if (Number.isNaN(Number(key))) {

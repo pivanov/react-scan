@@ -127,7 +127,13 @@ const HeaderInspect = () => {
       if (Store.inspectState.value.kind !== 'focused') return;
       if (!refReRenders.current || !refTiming.current) return;
 
-      const { totalUpdates, currentIndex, updates, isVisible, windowOffset, latestFiber } = state;
+      const {
+        totalUpdates,
+        currentIndex,
+        updates,
+        isVisible,
+        windowOffset,
+      } = state;
 
       const reRenders = Math.max(0, totalUpdates - 1);
       const headerText = isVisible
@@ -136,7 +142,7 @@ const HeaderInspect = () => {
 
       let formattedTime = '';
       if (reRenders > 0 && currentIndex >= 0 && currentIndex < updates.length) {
-        const time = latestFiber?.actualDuration ?? 0;
+        const time = updates[currentIndex]?.fiberInfo?.selfTime;
         formattedTime = time > 0
           ? time < 0.1 - Number.EPSILON
             ? '< 0.1ms'
@@ -144,7 +150,7 @@ const HeaderInspect = () => {
           : '';
       }
 
-      refReRenders.current.dataset.text = `${headerText}${reRenders > 0 ? ' •' : ''}`;
+      refReRenders.current.dataset.text = `${headerText}${reRenders > 0 && formattedTime ? ' •' : ''}`;
       if (formattedTime) {
         refTiming.current.dataset.text = formattedTime;
       }
