@@ -497,6 +497,7 @@ export const ScanOverlay = () => {
     Store.inspectState.value = {
       kind: 'focused',
       focusedDomElement: componentElement,
+      fiber: parentCompositeFiber,
     };
   };
 

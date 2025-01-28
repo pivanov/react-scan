@@ -16,6 +16,7 @@ import {
   updateDimensions,
 } from '../../state';
 import { Inspector } from '../inspector';
+import { ComponentsTree } from './components-tree';
 import { Header } from './header';
 import {
   calculateBoundedSize,
@@ -23,7 +24,6 @@ import {
   getBestCorner,
 } from './helpers';
 import { ResizeHandle } from './resize-handle';
-// import { Search } from './search';
 import { Toolbar } from './toolbar';
 
 export const Widget = () => {
@@ -110,6 +110,7 @@ export const Widget = () => {
         : newWidth > refInitialMinimizedWidth.current
           ? newDimensions
           : signalWidget.value.lastDimensions,
+      componentsTree: signalWidget.value.componentsTree,
     };
 
     if (shouldPersist) {
@@ -117,6 +118,7 @@ export const Widget = () => {
         corner: signalWidget.value.corner,
         dimensions: signalWidget.value.dimensions,
         lastDimensions: signalWidget.value.lastDimensions,
+        componentsTree: signalWidget.value.componentsTree,
       });
     }
 
@@ -237,12 +239,14 @@ export const Widget = () => {
             position: snappedPosition,
           },
           lastDimensions: signalWidget.value.lastDimensions,
+          componentsTree: signalWidget.value.componentsTree,
         };
 
         saveLocalStorage(LOCALSTORAGE_KEY, {
           corner: newCorner,
           dimensions: signalWidget.value.dimensions,
           lastDimensions: signalWidget.value.lastDimensions,
+          componentsTree: signalWidget.value.componentsTree,
         });
       };
 
@@ -258,8 +262,6 @@ export const Widget = () => {
   useEffect(() => {
     if (!refWidget.current) return;
 
-    refWidget.current.dir = 'ltr';
-    refWidget.current.style.placeSelf = 'self-start';
     refWidget.current.style.width = 'min-content';
     refInitialMinimizedHeight.current = 36; // height of the header
     refInitialMinimizedWidth.current = refWidget.current.offsetWidth;
@@ -336,6 +338,7 @@ export const Widget = () => {
       <ScanOverlay />
       <div
         id="react-scan-toolbar"
+        dir="ltr"
         ref={refWidget}
         onMouseDown={handleDrag}
         className={cn(
@@ -389,20 +392,19 @@ export const Widget = () => {
                 'text-white',
                 'bg-[#0A0A0A]',
                 'transition-opacity duration-150 delay-150',
-                'overflow-y-scroll overflow-x-hidden',
+                'overflow-hidden',
               )}
             >
               {
                 Store.inspectState.value.kind === 'focused' && (
                   <>
                     <Inspector />
-                    {/* <Search /> */}
+                    <ComponentsTree parentElement={refContent.current} />
                   </>
                 )
               }
             </div>
           </div>
-
           <Toolbar />
         </div>
       </div>

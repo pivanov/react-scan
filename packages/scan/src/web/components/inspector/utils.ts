@@ -35,6 +35,7 @@ export type States =
   | {
       kind: 'focused';
       focusedDomElement: Element;
+      fiber: Fiber;
     }
   | {
       kind: 'uninitialized';
@@ -452,6 +453,7 @@ export const getInspectableElements = (
     element: HTMLElement | null,
   ): HTMLElement | null => {
     if (!element) return null;
+
     const { parentCompositeFiber } = getCompositeComponentFromElement(element);
     if (!parentCompositeFiber) return null;
 

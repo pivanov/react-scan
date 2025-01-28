@@ -4,4 +4,6 @@ export const MIN_SIZE = {
   height: 36,
 } as const;
 
+export const MIN_CONTAINER_WIDTH = 180;
+
 export const LOCALSTORAGE_KEY = 'react-scan-widget-settings';

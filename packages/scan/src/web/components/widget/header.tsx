@@ -6,10 +6,8 @@ import { cn } from '~web/utils/helpers';
 import { Icon } from '../icon';
 import { timelineState } from '../inspector/states';
 import {
-  getCompositeComponentFromElement,
   getOverrideMethods,
 } from '../inspector/utils';
-import { Arrows } from './toolbar/arrows';
 
 // const REPLAY_DELAY_MS = 300;
 
@@ -111,11 +109,10 @@ const HeaderInspect = () => {
     const unSubState = Store.inspectState.subscribe((state) => {
       if (state.kind !== 'focused' || !refComponentName.current) return;
 
-      const focusedElement = state.focusedDomElement;
-      const { parentCompositeFiber } = getCompositeComponentFromElement(focusedElement);
-      if (!parentCompositeFiber) return;
+      const fiber = state.fiber;
+      if (!fiber) return;
 
-      const displayName = getDisplayName(parentCompositeFiber.type);
+      const displayName = getDisplayName(fiber.type);
       refComponentName.current.dataset.text = displayName ?? 'Unknown';
     });
 
@@ -223,7 +220,7 @@ export const Header = () => {
         <HeaderInspect />
       </div>
 
-      <Arrows />
+      {/* <Arrows /> */}
       {/* {Store.inspectState.value.kind !== 'inspect-off' && <BtnReplay />} */}
       <button
         type="button"

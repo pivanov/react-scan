@@ -95,6 +95,8 @@ svg {
   @apply z-[2147483678];
   @apply animate-fade-in animation-duration-300 animation-delay-300;
   @apply shadow-[0_4px_12px_rgba(0,0,0,0.2)];
+
+  @apply place-self-start;
 }
 
 .button {
@@ -263,7 +265,7 @@ svg {
 
 @keyframes shimmer {
   100% {
-    transform: translateX(100%);
+    @apply translate-x-full;
   }
 }
 
@@ -326,8 +328,8 @@ svg {
 }
 
 @keyframes blink {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from { @apply opacity-100; }
+  to { @apply opacity-0; }
 }
 
 .react-scan-arrow {
@@ -437,21 +439,21 @@ svg {
 }
 
 .react-scan-flash-active {
-  opacity: 0.4;
-  transition: opacity 300ms ease-in-out;
+  @apply opacity-40;
+  @apply transition-opacity duration-300;
 }
 
 .react-scan-inspector-overlay {
   @apply flex flex-col;
-  opacity: 0;
-  transition: opacity 300ms ease-in-out;
+  @apply opacity-0;
+  @apply transition-opacity duration-300;
 
   &.fade-out {
-    opacity: 0;
+    @apply opacity-0;
   }
 
   &.fade-in {
-    opacity: 1;
+    @apply opacity-100;
   }
 }
 
@@ -542,5 +544,50 @@ svg {
       @apply rounded-lg;
       @apply w-4 h-4;
     } */
+  }
+}
+
+.resize-v-line {
+  @apply flex items-center justify-center;
+  @apply min-w-3 max-w-3;
+  @apply w-full h-full;
+  @apply transition-colors duration-150;
+  @apply cursor-col-resize;
+
+  &:hover,
+  &:active {
+    &::before {
+      @apply bg-white/10;
+    }
+
+    > span {
+      @apply bg-white/10;
+    }
+
+    svg {
+      @apply opacity-100;
+    }
+  }
+
+  &::before {
+    @apply content-[""];
+    @apply absolute inset-0 left-1/2 -translate-x-1/2;
+    @apply w-[1px];
+    @apply transition-colors duration-150;
+  }
+
+  > span {
+    @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2;
+    @apply w-1.5 h-4.5;
+    @apply rounded;
+    @apply transition-colors duration-150;
+  }
+
+  svg {
+    @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2;
+    @apply text-neutral-400 rotate-90;
+    @apply opacity-0;
+    @apply transition-opacity duration-150;
+    @apply z-50;
   }
 }

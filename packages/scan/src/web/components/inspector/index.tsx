@@ -15,7 +15,7 @@ import {
   timelineActions,
 } from './states';
 import { collectInspectorData, getStateNames, resetTracking } from './timeline/utils';
-import { extractMinimalFiberInfo, getCompositeFiberFromElement } from './utils';
+import { extractMinimalFiberInfo } from './utils';
 import { WhatChangedSection } from './what-changed';
 
 export const globalInspectorState = {
@@ -109,18 +109,19 @@ export const Inspector = constant(() => {
         signalIsSettingsOpen.value = false;
       }
 
-      const { parentCompositeFiber } = getCompositeFiberFromElement(
-        state.focusedDomElement,
-      );
+      const fiber = state.fiber;
 
-      if (!parentCompositeFiber) return;
+      if (!fiber) return;
 
-      const isNewComponent = refLastInspectedFiber.current?.type !== parentCompositeFiber.type;
+      const isNewComponent =
+        refLastInspectedFiber.current?.type !== fiber.type ||
+        refLastInspectedFiber.current?.key !== fiber.key ||
+        refLastInspectedFiber.current?.index !== fiber.index;
 
       if (isNewComponent) {
-        refLastInspectedFiber.current = parentCompositeFiber;
+        refLastInspectedFiber.current = fiber;
         globalInspectorState.cleanup();
-        processUpdate(parentCompositeFiber);
+        processUpdate(fiber);
       }
     });
 
@@ -132,19 +133,18 @@ export const Inspector = constant(() => {
         return;
       }
 
-      const element = inspectState.focusedDomElement;
-      const { parentCompositeFiber } = getCompositeFiberFromElement(element);
+      const fiber = inspectState.fiber;
 
-      if (!parentCompositeFiber) {
+      if (!fiber) {
         Store.inspectState.value = {
           kind: 'inspect-off',
         };
         return;
       }
 
-      processUpdate(parentCompositeFiber);
+      processUpdate(fiber);
 
-      if (!element.isConnected) {
+      if (!inspectState.focusedDomElement.isConnected) {
         refLastInspectedFiber.current = null;
         globalInspectorState.cleanup();
         Store.inspectState.value = {
@@ -167,8 +167,8 @@ export const Inspector = constant(() => {
         ref={refInspector}
         className={cn(
           'react-scan-inspector',
+          'flex-1',
           'opacity-0',
-          'h-full',
           'overflow-y-auto overflow-x-hidden',
           'transition-opacity duration-150 delay-0',
           'pointer-events-none',

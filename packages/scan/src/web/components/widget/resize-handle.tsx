@@ -179,6 +179,7 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
       containerStyle.transform = `translate3d(${newPosition.x}px, ${newPosition.y}px, 0)`;
 
       signalWidget.value = {
+        ...signalWidget.value,
         corner: newCorner,
         dimensions: {
           isFullWidth: isCurrentFullWidth,
@@ -200,6 +201,7 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
         corner: newCorner,
         dimensions: signalWidget.value.dimensions,
         lastDimensions: signalWidget.value.lastDimensions,
+        componentsTree: signalWidget.value.componentsTree,
       });
     };
 
@@ -275,6 +277,7 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
         corner: newCorner,
         dimensions: newDimensions,
         lastDimensions: dimensions,
+        componentsTree: signalWidget.value.componentsTree,
       };
 
       containerStyle.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
@@ -303,7 +306,7 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
         'peer',
         {
           'resize-left peer/left': position === 'left',
-          'resize-right peer/right': position === 'right',
+          'resize-right peer/right z-10': position === 'right',
           'resize-top peer/top': position === 'top',
           'resize-bottom peer/bottom': position === 'bottom',
         },
@@ -314,7 +317,7 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
           <Icon
             name="icon-ellipsis"
             size={18}
-            className={cn('text-white/80', {
+            className={cn('text-neutral-400', {
               'rotate-90': position === 'left' || position === 'right',
             })}
           />

@@ -1,4 +1,5 @@
 import { getFiberId } from 'bippy';
+import type { Fiber } from 'bippy';
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { Store } from '~core/index';
 import { Icon } from '~web/components/icon';
@@ -12,10 +13,11 @@ import { cn } from '~web/utils/helpers';
 import { constant } from '~web/utils/preact/constant';
 import { getBatchedRectMap } from '../../../../new-outlines';
 
-type FocusedState = {
+interface FocusedState {
   kind: 'focused';
   focusedDomElement: Element;
-};
+  fiber: Fiber;
+}
 
 type InspectingState = {
   kind: 'inspecting';
@@ -36,7 +38,7 @@ type States =
   | InspectOffState
   | UninitializedState;
 
-function isFocusedState(state: States): state is FocusedState {
+export function isFocusedState(state: States): state is FocusedState {
   return state.kind === 'focused';
 }
 
@@ -185,49 +187,22 @@ export const Arrows = constant(() => {
     [],
   );
 
-  const onPreviousFocus = useCallback(async () => {
-    const currentState = Store.inspectState.value;
-    if (
-      !isFocusedState(currentState) ||
-      !currentState.focusedDomElement ||
-      refButtonPrevious.current?.disabled
-    ) {
-      return;
-    }
+  const handleClick = async (direction: 'previous' | 'next') => {
+    const state = Store.inspectState.value;
+    if (state.kind !== 'focused') return;
 
-    const prevElement = await findNextElement(
-      currentState.focusedDomElement,
-      'previous',
-    );
-    if (prevElement) {
-      Store.inspectState.value = {
-        kind: 'focused',
-        focusedDomElement: prevElement,
-      };
-    }
-  }, [findNextElement]);
+    const nextElement = await findNextElement(state.focusedDomElement, direction);
+    if (!nextElement) return;
 
-  const onNextFocus = useCallback(async () => {
-    const currentState = Store.inspectState.value;
-    if (
-      !isFocusedState(currentState) ||
-      !currentState.focusedDomElement ||
-      refButtonNext.current?.disabled
-    ) {
-      return;
-    }
+    const { parentCompositeFiber } = getCompositeComponentFromElement(nextElement);
+    if (!parentCompositeFiber) return;
 
-    const nextElement = await findNextElement(
-      currentState.focusedDomElement,
-      'next',
-    );
-    if (nextElement) {
-      Store.inspectState.value = {
-        kind: 'focused',
-        focusedDomElement: nextElement,
-      };
-    }
-  }, [findNextElement]);
+    Store.inspectState.value = {
+      kind: 'focused',
+      focusedDomElement: nextElement,
+      fiber: parentCompositeFiber,
+    };
+  };
 
   useEffect(() => {
     const unsubscribe = Store.inspectState.subscribe(async (state) => {
@@ -238,11 +213,9 @@ export const Arrows = constant(() => {
       ) {
         refAllElements.current = getInspectableElements();
 
-        const { parentCompositeFiber } = getCompositeComponentFromElement(
-          state.focusedDomElement,
-        );
-        if (parentCompositeFiber) {
-          const currentFiberId = getFiberId(parentCompositeFiber);
+        const fiber = state.fiber;
+        if (fiber) {
+          const currentFiberId = getFiberId(fiber);
           refCurrentFiberId.current = currentFiberId;
         }
 
@@ -322,7 +295,7 @@ export const Arrows = constant(() => {
         type="button"
         ref={refButtonPrevious}
         title="Previous element"
-        onClick={onPreviousFocus}
+        onClick={() => handleClick('previous')}
         className={cn(
           'button h-full',
           'flex items-center justify-center',
@@ -338,7 +311,7 @@ export const Arrows = constant(() => {
         type="button"
         ref={refButtonNext}
         title="Next element"
-        onClick={onNextFocus}
+        onClick={() => handleClick('next')}
         className={cn(
           'button h-full',
           'flex items-center justify-center',
