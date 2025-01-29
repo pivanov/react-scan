@@ -43,7 +43,7 @@
 //         'opacity-0',
 //         'max-h-0',
 //         'overflow-hidden',
-//         'transition-opacity duration-150 delay-0',
+//         'transition-opacity delay-0',
 //         'pointer-events-none',
 //         {
 //           'opacity-100 delay-300 pointer-events-auto max-h-["auto"]': isSettingsOpen,

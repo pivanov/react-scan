@@ -83,5 +83,10 @@ export const ICONS = `
     <path d="M2 7v10"/><path d="M6 5v14"/>
     <rect width="12" height="18" x="10" y="3" rx="2"/>
   </symbol>
+
+  <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="11" cy="11" r="8"/>
+    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </symbol>
 </svg>
 `;

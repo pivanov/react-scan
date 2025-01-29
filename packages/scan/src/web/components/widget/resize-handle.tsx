@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'preact/hooks';
 import { Store } from '~core/index';
 import { Icon } from '~web/components/icon';
 import { cn, saveLocalStorage } from '~web/utils/helpers';
-import { LOCALSTORAGE_KEY, MIN_SIZE } from '../../constants';
+import { LOCALSTORAGE_KEY, MIN_CONTAINER_WIDTH, MIN_SIZE } from '../../constants';
 import { signalRefWidget, signalWidget } from '../../state';
 import {
   calculateNewSizeAndPosition,
@@ -131,6 +131,14 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
         containerStyle.width = `${newSize.width}px`;
         containerStyle.height = `${newSize.height}px`;
 
+        // Adjust components tree width when widget is resized
+        const maxTreeWidth = Math.floor(newSize.width - (MIN_SIZE.width / 2));
+        const currentTreeWidth = signalWidget.value.componentsTree.width;
+        const newTreeWidth = Math.min(
+          maxTreeWidth,
+          Math.max(MIN_CONTAINER_WIDTH, currentTreeWidth)
+        );
+
         signalWidget.value = {
           ...signalWidget.value,
           dimensions: {
@@ -139,6 +147,10 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
             width: newSize.width,
             height: newSize.height,
             position: newPosition,
+          },
+          componentsTree: {
+            ...signalWidget.value.componentsTree,
+            width: newTreeWidth,
           },
         };
 
@@ -250,7 +262,7 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
         : windowDims.maxHeight;
       if (isPartiallyMaximized) {
         newHeight = isCurrentFullHeight
-          ? MIN_SIZE.height * 5
+          ? MIN_SIZE.initialHeight
           : windowDims.maxHeight;
       }
     }
@@ -259,7 +271,7 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
       if (position === 'left' || position === 'right') {
         newWidth = MIN_SIZE.width;
       } else {
-        newHeight = MIN_SIZE.height * 5;
+        newHeight = MIN_SIZE.initialHeight;
       }
     }
 

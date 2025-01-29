@@ -21,27 +21,27 @@ export const useVirtualList = (options: {
   const { count, getScrollElement, estimateSize, overscan = 5 } = options;
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
-  const resizeObserverRef = useRef<ResizeObserver>();
-  const scrollElementRef = useRef<HTMLElement | null>(null);
-  const rafIdRef = useRef<number | null>(null);
+  const refResizeObserver = useRef<ResizeObserver>();
+  const refScrollElement = useRef<HTMLElement | null>(null);
+  const refRafId = useRef<number | null>(null);
   const itemHeight = estimateSize();
 
   const updateContainer = useCallback((entries?: ResizeObserverEntry[]) => {
-    if (!scrollElementRef.current) return;
+    if (!refScrollElement.current) return;
 
     const height =
       entries?.[0]?.contentRect.height ??
-      scrollElementRef.current.getBoundingClientRect().height;
+      refScrollElement.current.getBoundingClientRect().height;
     setContainerHeight(height);
   }, []);
 
   const debouncedUpdateContainer = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
+    if (refRafId.current !== null) {
+      cancelAnimationFrame(refRafId.current);
     }
-    rafIdRef.current = requestAnimationFrame(() => {
+    refRafId.current = requestAnimationFrame(() => {
       updateContainer();
-      rafIdRef.current = null;
+      refRafId.current = null;
     });
   }, [updateContainer]);
 
@@ -49,21 +49,21 @@ export const useVirtualList = (options: {
     const element = getScrollElement();
     if (!element) return;
 
-    scrollElementRef.current = element;
+    refScrollElement.current = element;
 
     const handleScroll = () => {
-      if (!scrollElementRef.current) return;
-      setScrollTop(scrollElementRef.current.scrollTop);
+      if (!refScrollElement.current) return;
+      setScrollTop(refScrollElement.current.scrollTop);
     };
 
     updateContainer();
 
-    if (!resizeObserverRef.current) {
-      resizeObserverRef.current = new ResizeObserver(() => {
+    if (!refResizeObserver.current) {
+      refResizeObserver.current = new ResizeObserver(() => {
         debouncedUpdateContainer();
       });
     }
-    resizeObserverRef.current.observe(element);
+    refResizeObserver.current.observe(element);
 
     element.addEventListener('scroll', handleScroll, { passive: true });
 
@@ -76,12 +76,12 @@ export const useVirtualList = (options: {
 
     return () => {
       element.removeEventListener('scroll', handleScroll);
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
+      if (refResizeObserver.current) {
+        refResizeObserver.current.disconnect();
       }
       mutationObserver.disconnect();
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
+      if (refRafId.current !== null) {
+        cancelAnimationFrame(refRafId.current);
       }
     };
   }, [getScrollElement, updateContainer, debouncedUpdateContainer]);

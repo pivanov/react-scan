@@ -47,8 +47,16 @@ button {
   @apply hover:bg-none;
   @apply outline-none;
   @apply border-none;
-  @apply transition-colors duration-150 ease-linear;
+  @apply transition-colors ease-linear;
   @apply cursor-pointer;
+}
+
+input {
+  @apply outline-none;
+  @apply border-none;
+  @apply bg-none bg-transparent;
+  @apply outline-none;
+  @apply placeholder:text-neutral-500 placeholder:italic placeholder:text-xs;
 }
 
 svg {
@@ -118,7 +126,7 @@ svg {
   @apply absolute inset-0;
   @apply overflow-hidden;
   @apply bg-black;
-  @apply transition-all duration-150;
+  @apply transition-all;
 
   svg {
     @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2;
@@ -274,7 +282,7 @@ svg {
   @apply flex items-center gap-x-2;
   @apply px-3;
   @apply w-full h-8;
-  @apply text-[#888];
+  @apply text-[#888] truncate;
   @apply bg-[#0a0a0a] border-b-1 border-[#222];
 }
 
@@ -341,7 +349,7 @@ svg {
   @apply z-10;
 
   > svg {
-    @apply transition-transform duration-150;
+    @apply transition-transform;
   }
 }
 
@@ -389,7 +397,7 @@ svg {
   @apply opacity-0;
   @apply z-50;
   @apply pointer-events-none;
-  @apply transition-opacity duration-150;
+  @apply transition-opacity;
   @apply mix-blend-multiply;
   @apply bg-purple-500/90;
 }
@@ -551,7 +559,7 @@ svg {
   @apply flex items-center justify-center;
   @apply min-w-3 max-w-3;
   @apply w-full h-full;
-  @apply transition-colors duration-150;
+  @apply transition-colors;
   @apply cursor-col-resize;
 
   &:hover,
@@ -573,21 +581,51 @@ svg {
     @apply content-[""];
     @apply absolute inset-0 left-1/2 -translate-x-1/2;
     @apply w-[1px];
-    @apply transition-colors duration-150;
+    @apply transition-colors;
   }
 
   > span {
     @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2;
     @apply w-1.5 h-4.5;
     @apply rounded;
-    @apply transition-colors duration-150;
+    @apply transition-colors;
   }
 
   svg {
     @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2;
     @apply text-neutral-400 rotate-90;
     @apply opacity-0;
-    @apply transition-opacity duration-150;
+    @apply transition-opacity;
     @apply z-50;
+  }
+}
+
+
+.tree-node-search-highlight {
+  @apply truncate;
+
+  span {
+    @apply py-[1px];
+    @apply font-medium bg-yellow-300 text-black rounded-sm;
+  }
+
+  .single {
+    @apply px-[2px] mr-[1px];
+  }
+
+  .regex {
+    @apply px-[2px];
+  }
+
+  .start {
+    @apply rounded-l-sm ml-[1px];
+  }
+
+  .end {
+    @apply rounded-r-sm mr-[1px];
+  }
+
+  .middle {
+    @apply rounded-sm mx-[1px];
   }
 }

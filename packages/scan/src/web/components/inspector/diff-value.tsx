@@ -85,7 +85,7 @@ export const DiffValueView = ({
                           name="icon-chevron-right"
                           size={12}
                           className={cn(
-                            'transition-[transform,color] duration-150',
+                            'transition-[transform,color]',
                             'text-[#4ade80]',
                             {
                               'transform rotate-90': isExpanded,
@@ -141,7 +141,7 @@ export const DiffValueView = ({
               name="icon-chevron-right"
               size={12}
               className={cn(
-                'transition-[transform,color] duration-150',
+                'transition-[transform,color]',
                 'text-[#4ade80]',
                 {
                   'transform rotate-90': expanded,
@@ -161,7 +161,7 @@ export const DiffValueView = ({
       </div>
       <CopyToClipboard
         text={formatForClipboard(safeValue)}
-        className="opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        className="opacity-0 transition-opacity group-hover:opacity-100"
       >
         {({ ClipboardIcon }) => <>{ClipboardIcon}</>}
       </CopyToClipboard>

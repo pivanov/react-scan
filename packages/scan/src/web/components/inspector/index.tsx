@@ -60,7 +60,7 @@ class InspectorErrorBoundary extends Component {
           <button
             type="button"
             onClick={this.handleReset}
-            className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-medium transition-colors duration-150 flex items-center justify-center gap-2"
+            className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2"
           >
             Reset Inspector
           </button>
@@ -170,7 +170,7 @@ export const Inspector = constant(() => {
           'flex-1',
           'opacity-0',
           'overflow-y-auto overflow-x-hidden',
-          'transition-opacity duration-150 delay-0',
+          'transition-opacity delay-0',
           'pointer-events-none',
           {
             'opacity-100 delay-300 pointer-events-auto': !isSettingsOpen,

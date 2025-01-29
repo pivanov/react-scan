@@ -68,7 +68,7 @@ export const Widget = () => {
     const newPosition = calculatePosition(corner, newWidth, newHeight);
 
     const isTooSmall =
-      newWidth < MIN_SIZE.width || newHeight < MIN_SIZE.height * 5;
+      newWidth < MIN_SIZE.width || newHeight < MIN_SIZE.initialHeight;
     const shouldPersist = shouldSave && !isTooSmall;
 
     const container = refWidget.current;
@@ -365,7 +365,7 @@ export const Widget = () => {
             'rounded-lg',
             'bg-black',
             'opacity-100',
-            'transition-[border-radius] duration-150',
+            'transition-[border-radius]',
             'peer-hover/left:rounded-l-none',
             'peer-hover/right:rounded-r-none',
             'peer-hover/top:rounded-t-none',
@@ -381,7 +381,7 @@ export const Widget = () => {
               'rounded-t-lg',
               'overflow-hidden',
               'opacity-100',
-              'transition-[opacity] duration-150',
+              'transition-[opacity]',
             )}
           >
             <Header />
@@ -391,7 +391,7 @@ export const Widget = () => {
                 'flex-1 flex',
                 'text-white',
                 'bg-[#0A0A0A]',
-                'transition-opacity duration-150 delay-150',
+                'transition-opacity delay-150',
                 'overflow-hidden',
               )}
             >
@@ -399,7 +399,7 @@ export const Widget = () => {
                 Store.inspectState.value.kind === 'focused' && (
                   <>
                     <Inspector />
-                    <ComponentsTree parentElement={refContent.current} />
+                    <ComponentsTree />
                   </>
                 )
               }

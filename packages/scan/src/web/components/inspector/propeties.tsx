@@ -523,7 +523,7 @@ export const PropertyElement = ({
           )}
           <CopyToClipboard
             text={clipboardText}
-            className="opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+            className="opacity-0 transition-opacity group-hover:opacity-100"
           >
             {({ ClipboardIcon }) => <>{ClipboardIcon}</>}
           </CopyToClipboard>

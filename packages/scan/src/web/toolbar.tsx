@@ -31,7 +31,7 @@ class ToolbarErrorBoundary extends Component {
             <button
               type="button"
               onClick={this.handleReset}
-              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium transition-colors duration-150 flex items-center justify-center gap-1.5"
+              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
             >
               Restart
             </button>

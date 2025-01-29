@@ -709,7 +709,7 @@ const DiffChange = ({
                   {typeof prevDiffValue === 'function' && (
                     <CopyToClipboard
                       text={prevDiffValue.toString()}
-                      className="opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                        className="opacity-0 transition-opacity group-hover:opacity-100"
                     >
                       {({ ClipboardIcon }) => <>{ClipboardIcon}</>}
                     </CopyToClipboard>
@@ -788,7 +788,7 @@ const DiffChange = ({
                   {typeof currDiffValue === 'function' && (
                     <CopyToClipboard
                       text={currDiffValue.toString()}
-                      className="opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                        className="opacity-0 transition-opacity group-hover:opacity-100"
                     >
                       {({ ClipboardIcon }) => <>{ClipboardIcon}</>}
                     </CopyToClipboard>
