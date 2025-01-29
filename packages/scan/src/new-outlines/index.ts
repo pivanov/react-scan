@@ -289,8 +289,8 @@ export const getCanvasEl = () => {
 
   if (IS_OFFSCREEN_CANVAS_WORKER_SUPPORTED) {
     try {
-      const useExtensionWorker = readLocalStorage<boolean>('useExtensionWorker');
-      removeLocalStorage('useExtensionWorker');
+      const useExtensionWorker = readLocalStorage<boolean>('use-extension-worker');
+      removeLocalStorage('use-extension-worker');
 
       if (useExtensionWorker) {
         worker = new Worker(

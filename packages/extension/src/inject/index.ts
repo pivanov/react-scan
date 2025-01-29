@@ -1,15 +1,32 @@
-import { sleep, storageGetItem, storageSetItem } from '@pivanov/utils';
+import { sleep, storageGetItem } from '@pivanov/utils';
 import * as reactScan from 'react-scan';
+import type { Options } from 'react-scan';
 import { broadcast, canLoadReactScan, hasReactFiber } from '../utils/helpers';
-import { createReactNotAvailableUI, toggleReactIsNotAvailable } from './react-is-not-available';
+import {
+  createReactNotAvailableUI,
+  toggleReactIsNotAvailable,
+} from './react-is-not-available';
+
 
 window.reactScan = reactScan.setOptions;
 
-reactScan.scan({
-  enabled: true,
-  showToolbar: true,
-  dangerouslyForceRunInProduction: true,
-});
+storageGetItem<boolean>('react-scan-extension', 'isEnabled').then(
+  (isEnabled) => {
+    const options: Partial<Options> = {
+      enabled: false,
+      showToolbar: false,
+      dangerouslyForceRunInProduction: true,
+    };
+
+    if (isEnabled !== null) {
+      options.enabled = isEnabled;
+      options.showToolbar = isEnabled;
+    }
+
+    reactScan.scan(options);
+  },
+);
+
 
 window.addEventListener('DOMContentLoaded', async () => {
   if (!canLoadReactScan) {
@@ -28,15 +45,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     createReactNotAvailableUI();
   }
 
-  const isDefaultEnabled = await storageGetItem<boolean>(
-    'react-scan',
-    'enabled',
-  );
-  reactScan.setOptions({
-    enabled: !!isDefaultEnabled,
-    showToolbar: !!isDefaultEnabled,
-  });
-
   broadcast.onmessage = async (type, data) => {
     if (type === 'react-scan:toggle-state') {
       broadcast.postMessage('react-scan:react-version', {
@@ -44,12 +52,14 @@ window.addEventListener('DOMContentLoaded', async () => {
       });
 
       if (isReactAvailable) {
-        const state = data?.state;
+        const isEnabled = data?.state;
+
         reactScan.setOptions({
-          enabled: state,
-          showToolbar: state,
+          enabled: isEnabled,
+          showToolbar: isEnabled,
         });
-        void storageSetItem('react-scan', 'enabled', state);
+
+        reactScan.start();
       } else {
         toggleReactIsNotAvailable();
       }

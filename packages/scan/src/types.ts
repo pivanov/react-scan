@@ -35,9 +35,8 @@ declare global {
   type TTimer = NodeJS.Timeout;
 
   interface Window {
-    isReactScanExtension?: boolean;
     reactScan: Scan;
-    __REACT_SCAN_TOOLBAR_CONTAINER__?: HTMLDivElement
+    __REACT_SCAN_TOOLBAR_CONTAINER__?: HTMLDivElement;
 
     __REACT_DEVTOOLS_GLOBAL_HOOK__?: {
       checkDCE: (fn: unknown) => void;

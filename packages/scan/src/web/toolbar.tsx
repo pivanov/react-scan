@@ -62,6 +62,7 @@ export const createToolbar = (root: ShadowRoot): HTMLElement => {
 
   container.remove = () => {
     if (container.hasChildNodes()) {
+      scriptLevelToolbar = null;
       // Double render(null) is needed to fully unmount Preact components.
       // The first call initiates unmounting, while the second ensures
       // cleanup of internal VNode references and event listeners.
