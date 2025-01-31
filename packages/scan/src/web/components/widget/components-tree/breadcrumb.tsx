@@ -6,9 +6,9 @@ import {
   getInspectableAncestors,
 } from '~web/components/inspector/utils';
 import { cn } from '~web/utils/helpers';
-import { type TreeItem, inspectedElementSignal } from './state';
+import { type TreeItem, signalSkipTreeUpdate } from './state';
 
-export const Breadcrumb = () => {
+export const Breadcrumb = ({ selectedElement }: { selectedElement: HTMLElement | null }) => {
   const refContainer = useRef<HTMLDivElement>(null);
   const refPaths = useRef<HTMLDivElement>(null);
 
@@ -16,26 +16,10 @@ export const Breadcrumb = () => {
   const [areAllItemsVisible, setAreAllItemsVisible] = useState(true);
 
   useEffect(() => {
-    const handleElementChange = (focusedDomElement: HTMLElement | null) => {
-      if (!focusedDomElement) return;
-      const ancestors = getInspectableAncestors(focusedDomElement);
-      setPath(ancestors);
-    };
-
-    const unsubscribeStore = Store.inspectState.subscribe((state) => {
-      if (state.kind === 'focused' && state.focusedDomElement) {
-        handleElementChange(state.focusedDomElement as HTMLElement);
-      }
-    });
-
-    if (Store.inspectState.value.kind === 'focused') {
-      handleElementChange(Store.inspectState.value.focusedDomElement as HTMLElement);
-    }
-
-    return () => {
-      unsubscribeStore();
-    };
-  }, []);
+    if (!selectedElement) return;
+    const ancestors = getInspectableAncestors(selectedElement);
+    setPath(ancestors);
+  }, [selectedElement]);
 
   useEffect(() => {
     let timeoutId: TTimer;
@@ -63,6 +47,8 @@ export const Breadcrumb = () => {
     const { parentCompositeFiber } = getCompositeFiberFromElement(element);
     if (!parentCompositeFiber) return;
 
+    signalSkipTreeUpdate.value = false;
+
     Store.inspectState.value = {
       kind: 'focused',
       focusedDomElement: element,
@@ -86,25 +72,24 @@ export const Breadcrumb = () => {
     >
       <button
         type="button"
+        className="hover:text-neutral-300 transition-colors"
         onClick={() => {
-          inspectedElementSignal.value = firstItem.element;
           handleElementClick(firstItem.element as HTMLElement);
         }}
       >
         {firstItem?.name}
       </button>
-      {
-        !areAllItemsVisible && restItems.length > 1
-          ? (
-            <span className="text-sm w-2.5 h-2.5 flex items-center justify-center">…</span>
-          )
-          : restItems.length > 0 && (
-            <span className="w-2.5 h-2.5 flex items-center justify-center text-neutral-400">
-              <Icon name="icon-chevron-right" size={10} />
-            </span>
-          )
-
-      }
+      {!areAllItemsVisible && restItems.length > 1 ? (
+        <span className="text-sm w-2.5 h-2.5 flex items-center justify-center">
+          …
+        </span>
+      ) : (
+        restItems.length > 0 && (
+          <span className="w-2.5 h-2.5 flex items-center justify-center text-neutral-400">
+            <Icon name="icon-chevron-right" size={10} />
+          </span>
+        )
+      )}
       <div className="h-7 overflow-hidden">
         <div
           ref={refPaths}
@@ -112,37 +97,36 @@ export const Breadcrumb = () => {
             'flex-1 flex flex-wrap flex-row-reverse justify-end gap-x-1',
           )}
         >
-          {
-            restItems.map((item, index) => (
-              <div
-                key={`${item.name}-${index}`}
-                className={cn(
-                  'flex-1 flex items-center gap-x-1',
-                  'flex-[0_0_auto]',
-                  'h-7',
-                  'overflow-hidden'
-                )}
+          {restItems.map((item, index) => (
+            <div
+              key={`${item.name}-${index}`}
+              className={cn(
+                'flex-1 flex items-center gap-x-1',
+                'flex-[0_0_auto]',
+                'h-7',
+                'hover:text-neutral-300 transition-colors',
+                'overflow-hidden',
+              )}
+            >
+              <button
+                type="button"
+                title={item.name}
+                style={{ maxWidth: '120px' }} // CSS hack to force truncation
+                className="truncate"
+                onClick={() => {
+                  handleElementClick(item.element as HTMLElement);
+                }}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    inspectedElementSignal.value = item.element;
-                    handleElementClick(item.element as HTMLElement);
-                  }}
-                >
-                  {item.name}
-                </button>
+                {item.name}
+              </button>
 
-                {
-                  index > 0 && (
-                    <span className="w-2.5 h-2.5 flex items-center justify-center text-neutral-400">
-                      <Icon name="icon-chevron-right" size={10} />
-                    </span>
-                  )
-                }
-              </div>
-            ))
-          }
+              {index > 0 && (
+                <span className="w-2.5 h-2.5 flex items-center justify-center text-neutral-400">
+                  <Icon name="icon-chevron-right" size={10} />
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>

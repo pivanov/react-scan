@@ -186,7 +186,7 @@ const renderStateName = (key: string, componentName: string) => {
       {getOrdinalSuffix(n)} hook{' '}
       <span style={{ color: '#666' }}>
         called in{' '}
-        <i className={cn('text-[#A855F7]', 'truencate')}>{componentName}</i>
+        <i className="text-[#A855F7] truncate">{componentName}</i>
       </span>
     </span>
   );
@@ -278,9 +278,7 @@ const WhatsChangedHeader = memo<{
         }
       });
 
-      return () => {
-        unsubscribe();
-      };
+      return unsubscribe;
     }, []);
 
     const toggleExpanded = useCallback(() => {
@@ -446,9 +444,7 @@ const Section = memo(({ title, isExpanded }: SectionProps) => {
       setChanges(refLatestChanges.current);
     });
 
-    return () => {
-      unsubscribe();
-    };
+    return unsubscribe;
   }, [title]);
 
   const handleExpandEntry = useCallback((entryKey: string) => {

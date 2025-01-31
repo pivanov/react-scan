@@ -57,6 +57,7 @@ input {
   @apply bg-none bg-transparent;
   @apply outline-none;
   @apply placeholder:text-neutral-500 placeholder:italic placeholder:text-xs;
+  @apply placeholder-shown:truncate;
 }
 
 svg {
@@ -545,29 +546,18 @@ svg {
     @apply bg-[#8e61e3];
     @apply pointer-events-none;
     @apply transition-transform duration-75;
-    /* &::before {
-      @apply content-[''];
-      @apply absolute inset-0;
-      @apply bg-green-500;
-      @apply rounded-lg;
-      @apply w-4 h-4;
-    } */
   }
 }
 
 .resize-v-line {
   @apply flex items-center justify-center;
-  @apply min-w-3 max-w-3;
+  @apply min-w-5 max-w-5;
   @apply w-full h-full;
   @apply transition-colors;
   @apply cursor-col-resize;
 
   &:hover,
   &:active {
-    &::before {
-      @apply bg-white/10;
-    }
-
     > span {
       @apply bg-white/10;
     }
@@ -581,6 +571,7 @@ svg {
     @apply content-[""];
     @apply absolute inset-0 left-1/2 -translate-x-1/2;
     @apply w-[1px];
+    @apply bg-white/10;
     @apply transition-colors;
   }
 

@@ -386,8 +386,7 @@ export const getAllFiberContexts = (
     const dependencies = currentFiber.dependencies;
 
     if (dependencies?.firstContext) {
-      let contextItem: ContextDependency<unknown> | null =
-        dependencies.firstContext;
+      let contextItem: ContextDependency<unknown> | null = dependencies.firstContext;
 
       while (contextItem) {
         const memoizedValue = contextItem.memoizedValue;
@@ -399,7 +398,6 @@ export const getAllFiberContexts = (
             displayName: displayName ?? 'UnnamedContext',
             contextType: null,
           });
-        } else {
         }
 
         if (contextItem === contextItem.next) {
@@ -408,7 +406,6 @@ export const getAllFiberContexts = (
 
         contextItem = contextItem.next;
       }
-    } else {
     }
 
     currentFiber = currentFiber.return;

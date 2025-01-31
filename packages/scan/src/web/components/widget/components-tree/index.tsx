@@ -1,12 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'preact/hooks';
 import { Store } from '~core/index';
 import { Icon } from '~web/components/icon';
 import { inspectorUpdateSignal } from '~web/components/inspector/states';
-import { getInspectableElements } from '~web/components/inspector/utils';
-import { LOCALSTORAGE_KEY, MIN_CONTAINER_WIDTH, MIN_SIZE } from '~web/constants';
+import {
+  type InspectableElement,
+  getInspectableElements,
+} from '~web/components/inspector/utils';
+import {
+  LOCALSTORAGE_KEY,
+  MIN_CONTAINER_WIDTH,
+  MIN_SIZE,
+} from '~web/constants';
 import { useVirtualList } from '~web/hooks/use-virtual-list';
 import { signalWidget } from '~web/state';
-import { cn, saveLocalStorage } from '~web/utils/helpers';
+import {
+  cn,
+  getExtendedDisplayName,
+  saveLocalStorage,
+} from '~web/utils/helpers';
 import { getCompositeComponentFromElement } from '../../inspector/utils';
 import { Breadcrumb } from './breadcrumb';
 import {
@@ -14,8 +31,8 @@ import {
   SEARCH_PREFIX_LENGTH,
   type SearchIndex,
   type TreeNode,
-  inspectedElementSignal,
   searchState,
+  signalSkipTreeUpdate,
 } from './state';
 
 const flattenTree = (
@@ -33,6 +50,7 @@ const flattenTree = (
       depth,
       nodeId: nodePath,
       parentId: parentPath,
+      fiber: node.fiber,
     };
     acc.push(flatNode);
 
@@ -57,13 +75,11 @@ const calculateIndentSize = (containerWidth: number, maxDepth: number) => {
   if (maxDepth > 0) {
     const baseIndent = Math.min(MAX_INDENT, availableSpace / (maxDepth + 1));
 
-    return (depth: number) => {
-      const scaleFactor = Math.max(0.4, 1 - depth * 0.1);
-      return Math.max(MIN_INDENT, baseIndent * scaleFactor);
-    };
+    const scaleFactor = Math.max(0.4, 1 - maxDepth * 0.1);
+    return Math.max(MIN_INDENT, baseIndent * scaleFactor);
   }
 
-  return () => MAX_INDENT;
+  return MAX_INDENT;
 };
 
 interface TreeNodeItemProps {
@@ -84,29 +100,21 @@ const TreeNodeItem = ({
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expandedNodes.has(node.nodeId);
 
-  const handleClick = useCallback(
-    (e: MouseEvent) => {
-      e.stopPropagation();
-      if (node.element) {
-        onElementClick?.(node.element);
-      }
-    },
-    [node.element, onElementClick],
-  );
+  const handleClick = useCallback(() => {
+    if (node.element) {
+      onElementClick?.(node.element);
+    }
+  }, [node.element, onElementClick]);
 
-  const handleToggle = useCallback(
-    (e: MouseEvent) => {
-      e.stopPropagation();
-      if (hasChildren) {
-        onToggle(node.nodeId);
-      }
-    },
-    [hasChildren, node.nodeId, onToggle],
-  );
+  const handleToggle = useCallback(() => {
+    if (hasChildren) {
+      onToggle(node.nodeId);
+    }
+  }, [hasChildren, node.nodeId, onToggle]);
 
   const highlightedText = useMemo(() => {
     const { query, matches } = searchValue;
-    const isMatch = matches.some(match => match.nodeId === node.nodeId);
+    const isMatch = matches.some((match) => match.nodeId === node.nodeId);
 
     if (!query || !isMatch) {
       return <span className="truncate">{node.label}</span>;
@@ -120,28 +128,23 @@ const TreeNodeItem = ({
 
         return (
           <span className="tree-node-search-highlight">
-            {
-              parts.map((part, index) =>
-                regex.test(part)
-                  ? (
-                    <span
-                      key={`${node.nodeId}-${part}`}
-                      className={cn(
-                        'regex',
-                        {
-                          'start': regex.test(part) && index === 0,
-                          'middle': regex.test(part) && index % 2 === 1,
-                          'end': regex.test(part) && index === parts.length - 1,
-                          '!ml-0': index === 1,
-                        }
-                      )}
-                    >
-                      {part}
-                    </span>
-                  )
-                  : part
-              )
-            }
+            {parts.map((part, index) =>
+              regex.test(part) ? (
+                <span
+                  key={`${node.nodeId}-${part}`}
+                  className={cn('regex', {
+                    start: regex.test(part) && index === 0,
+                    middle: regex.test(part) && index % 2 === 1,
+                    end: regex.test(part) && index === parts.length - 1,
+                    '!ml-0': index === 1,
+                  })}
+                >
+                  {part}
+                </span>
+              ) : (
+                part
+              ),
+            )}
           </span>
         );
       }
@@ -166,9 +169,63 @@ const TreeNodeItem = ({
     return <span className="truncate">{node.label}</span>;
   }, [node.label, node.nodeId, searchValue]);
 
+  const componentTypes = useMemo(() => {
+    if (!node.fiber) return null;
+    const { wrapperTypes } = getExtendedDisplayName(node.fiber);
+
+    const typeSearches: string[] = [];
+    const { query } = searchValue;
+    const typeMatch = query.match(/\[(.*?)\]/);
+    if (typeMatch) {
+      typeSearches.push(
+        ...typeMatch[1].split(',').map((t) => t.trim().toLowerCase()),
+      );
+    }
+
+    const firstWrapperType = wrapperTypes[0];
+
+    const isMatched =
+      typeSearches.length > 0 &&
+      typeSearches.every((search) =>
+        wrapperTypes.some((wrapperType) =>
+          wrapperType.type.toLowerCase().startsWith(search),
+        ),
+      );
+    return (
+      <span
+        className={cn(
+          'flex items-center gap-x-1',
+          'text-[10px] text-neutral-400 tracking-wide',
+          'overflow-hidden',
+        )}
+      >
+        {firstWrapperType && (
+          <span
+            key={firstWrapperType.type}
+            title={firstWrapperType.title}
+            className={cn(
+              'rounded py-[1px] px-1',
+              'bg-neutral-700 text-neutral-300',
+              'truncate',
+              {
+                'bg-[#8e61e3] text-white': firstWrapperType.type === 'memo',
+                'bg-yellow-300 text-black': isMatched,
+              },
+            )}
+          >
+            {firstWrapperType.type}
+            {firstWrapperType.compiler && '✦'}
+          </span>
+        )}
+        {wrapperTypes.length > 1 && `×${wrapperTypes.length - 1}`}
+      </span>
+    );
+  }, [node.fiber, searchValue]);
+
   return (
     <button
       type="button"
+      title={node.title}
       className={cn(
         'flex items-center gap-x-1',
         'px-2',
@@ -182,10 +239,7 @@ const TreeNodeItem = ({
       <button
         type="button"
         onClick={handleToggle}
-        className={cn(
-          'w-4 h-4 flex items-center justify-center',
-          'text-left',
-        )}
+        className={cn('w-4 h-4 flex items-center justify-center', 'text-left')}
       >
         {hasChildren && (
           <Icon
@@ -198,6 +252,7 @@ const TreeNodeItem = ({
         )}
       </button>
       {highlightedText}
+      {componentTypes}
     </button>
   );
 };
@@ -208,13 +263,13 @@ export const ComponentsTree = () => {
   const refMainContainer = useRef<HTMLDivElement>(null);
   const refSearchInputContainer = useRef<HTMLDivElement>(null);
   const refSearchInput = useRef<HTMLInputElement>(null);
+  const refFlattenedNodes = useRef<FlattenedNode[]>([]);
+  const refSelectedElement = useRef<HTMLElement | null>(null);
+  const refMaxTreeDepth = useRef(0);
 
-  const [flattenedNodes, setFlattenedNodes] = useState<FlattenedNode[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [visibleNodes, setVisibleNodes] = useState<FlattenedNode[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const refInitialElement = useRef<Element | null>(null);
-  const [maxTreeDepth, setMaxTreeDepth] = useState(0);
   const refIsHovering = useRef(false);
 
   const refSearchIndex = useRef<SearchIndex>({
@@ -259,47 +314,51 @@ export const ComponentsTree = () => {
     };
   }, []);
 
-  const handleElementClick = useCallback((element: HTMLElement) => {
-    refIsHovering.current = true;
-    refSearchInput.current?.blur();
+  const handleElementClick = useCallback(
+    (element: HTMLElement) => {
+      refIsHovering.current = true;
+      refSearchInput.current?.blur();
+      signalSkipTreeUpdate.value = true;
 
-    const { parentCompositeFiber } =
-      getCompositeComponentFromElement(element);
-    if (!parentCompositeFiber) return;
+      const { parentCompositeFiber } =
+        getCompositeComponentFromElement(element);
+      if (!parentCompositeFiber) return;
 
-    Store.inspectState.value = {
-      kind: 'focused',
-      focusedDomElement: element,
-      fiber: parentCompositeFiber,
-    };
+      Store.inspectState.value = {
+        kind: 'focused',
+        focusedDomElement: element,
+        fiber: parentCompositeFiber,
+      };
 
-    const nodeIndex = visibleNodes.findIndex(
-      (node) => node.element === element,
-    );
-    if (nodeIndex !== -1) {
-      setSelectedIndex(nodeIndex);
-      const itemTop = nodeIndex * ITEM_HEIGHT;
-      const container = refContainer.current;
-      if (container) {
-        const containerHeight = container.clientHeight;
-        const scrollTop = container.scrollTop;
-        const breadcrumbHeight = 32;
+      const nodeIndex = visibleNodes.findIndex(
+        (node) => node.element === element,
+      );
+      if (nodeIndex !== -1) {
+        setSelectedIndex(nodeIndex);
+        const itemTop = nodeIndex * ITEM_HEIGHT;
+        const container = refContainer.current;
+        if (container) {
+          const containerHeight = container.clientHeight;
+          const scrollTop = container.scrollTop;
+          const breadcrumbHeight = 32;
 
-        if (
-          itemTop < scrollTop ||
-          itemTop + ITEM_HEIGHT > scrollTop + containerHeight
-        ) {
-          container.scrollTo({
-            top: Math.max(
-              0,
-              itemTop - (containerHeight - breadcrumbHeight) / 2,
-            ),
-            behavior: 'smooth',
-          });
+          if (
+            itemTop < scrollTop ||
+            itemTop + ITEM_HEIGHT > scrollTop + containerHeight
+          ) {
+            container.scrollTo({
+              top: Math.max(
+                0,
+                itemTop - (containerHeight - breadcrumbHeight) / 2,
+              ),
+              behavior: 'instant',
+            });
+          }
         }
       }
-    }
-  }, [visibleNodes]);
+    },
+    [visibleNodes],
+  );
 
   const handleToggle = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -315,7 +374,8 @@ export const ComponentsTree = () => {
 
   const handleOnChangeSearch = useCallback((query: string) => {
     refSearchInputContainer.current?.classList.remove('!border-red-500');
-    const { prefixMap, nodeMap, labelMap, PREFIX_LENGTH } = refSearchIndex.current;
+    const { prefixMap, nodeMap, labelMap, PREFIX_LENGTH } =
+      refSearchIndex.current;
     const matches: FlattenedNode[] = [];
 
     if (!query) {
@@ -324,6 +384,7 @@ export const ComponentsTree = () => {
     }
 
     const isRegex = /^\/.*\/$/.test(query);
+    const isTypeSearch = /\[(.*?)\]/.test(query);
 
     if (isRegex) {
       try {
@@ -339,6 +400,45 @@ export const ComponentsTree = () => {
       } catch {
         refSearchInputContainer.current?.classList.add('!border-red-500');
       }
+    } else if (isTypeSearch) {
+      const typeMatch = query.match(/\[(.*?)\]/);
+      if (!typeMatch) return;
+
+      const typeSearches = typeMatch[1]
+        .split(',')
+        .map((t) => t.trim().toLowerCase());
+      const regularSearch = query
+        .replace(/\[.*?\]/, '')
+        .trim()
+        .toLowerCase();
+
+      for (const [id, node] of nodeMap) {
+        let matchesSearch = true;
+
+        if (typeSearches.length > 0 && node.fiber) {
+          const { wrapperTypes } = getExtendedDisplayName(node.fiber);
+          const nodeWrapperTypes = wrapperTypes.map((w) =>
+            w.type.toLowerCase(),
+          );
+
+          matchesSearch = typeSearches.every((search) =>
+            nodeWrapperTypes.some((type) => type.startsWith(search)),
+          );
+        } else if (typeSearches.length > 0) {
+          matchesSearch = false;
+        }
+
+        if (matchesSearch && regularSearch) {
+          const label = labelMap.get(id);
+          if (!label?.includes(regularSearch)) {
+            matchesSearch = false;
+          }
+        }
+
+        if (matchesSearch) {
+          matches.push(node);
+        }
+      }
     } else {
       const lowerQuery = query.toLowerCase();
       const searchPrefix = lowerQuery.slice(0, PREFIX_LENGTH);
@@ -348,7 +448,7 @@ export const ComponentsTree = () => {
         for (const id of matchingIds) {
           const node = nodeMap.get(id);
           const lowerLabel = labelMap.get(id);
-          if (node && lowerLabel?.startsWith(lowerQuery)) {
+          if (node && lowerLabel?.includes(lowerQuery)) {
             matches.push(node);
           }
         }
@@ -373,12 +473,12 @@ export const ComponentsTree = () => {
           const containerHeight = container.clientHeight;
           container.scrollTo({
             top: Math.max(0, itemTop - containerHeight / 2),
-            behavior: 'smooth',
+            behavior: 'instant',
           });
         }
       }
     }
-  }, [visibleNodes]);
+  }, [visibleNodes.findIndex]);
 
   const handleInputChange = useCallback((e: Event) => {
     const target = e.currentTarget as HTMLInputElement;
@@ -386,40 +486,37 @@ export const ComponentsTree = () => {
     handleOnChangeSearch(target.value);
   }, [handleOnChangeSearch]);
 
-  const navigateSearch = useCallback(
-    (direction: 'next' | 'prev') => {
-      const { matches, currentMatchIndex } = searchState.value;
-      if (matches.length === 0) return;
+  const navigateSearch = useCallback((direction: 'next' | 'prev') => {
+    const { matches, currentMatchIndex } = searchState.value;
+    if (matches.length === 0) return;
 
-      const newIndex =
-        direction === 'next'
-          ? (currentMatchIndex + 1) % matches.length
-          : (currentMatchIndex - 1 + matches.length) % matches.length;
+    const newIndex =
+      direction === 'next'
+        ? (currentMatchIndex + 1) % matches.length
+        : (currentMatchIndex - 1 + matches.length) % matches.length;
 
-      searchState.value = {
-        ...searchState.value,
-        currentMatchIndex: newIndex,
-      };
+    searchState.value = {
+      ...searchState.value,
+      currentMatchIndex: newIndex,
+    };
 
-      const currentMatch = matches[newIndex];
-      const nodeIndex = visibleNodes.findIndex(
-        (node) => node.nodeId === currentMatch.nodeId,
-      );
-      if (nodeIndex !== -1) {
-        setSelectedIndex(nodeIndex);
-        const itemTop = nodeIndex * ITEM_HEIGHT;
-        const container = refContainer.current;
-        if (container) {
-          const containerHeight = container.clientHeight;
-          container.scrollTo({
-            top: Math.max(0, itemTop - containerHeight / 2),
-            behavior: 'smooth',
-          });
-        }
+    const currentMatch = matches[newIndex];
+    const nodeIndex = visibleNodes.findIndex(
+      (node) => node.nodeId === currentMatch.nodeId,
+    );
+    if (nodeIndex !== -1) {
+      setSelectedIndex(nodeIndex);
+      const itemTop = nodeIndex * ITEM_HEIGHT;
+      const container = refContainer.current;
+      if (container) {
+        const containerHeight = container.clientHeight;
+        container.scrollTo({
+          top: Math.max(0, itemTop - containerHeight / 2),
+          behavior: 'instant',
+        });
       }
-    },
-    [visibleNodes],
-  );
+    }
+  }, [visibleNodes]);
 
   const updateContainerWidths = useCallback((width: number) => {
     if (refMainContainer.current) {
@@ -427,14 +524,15 @@ export const ComponentsTree = () => {
     }
     if (refContainer.current) {
       refContainer.current.style.width = `${width}px`;
-      const indentSize = calculateIndentSize(width, maxTreeDepth);
+      const indentSize = calculateIndentSize(width, refMaxTreeDepth.current);
       refContainer.current.style.setProperty(
         '--indentation-size',
-        `${indentSize(0)}px`,
+        `${indentSize}px`,
       );
     }
-  }, [maxTreeDepth]);
+  }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   const handleResize = useCallback((e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -445,7 +543,7 @@ export const ComponentsTree = () => {
     const startX = e.clientX;
     const startWidth = refContainer.current.offsetWidth;
     const parentWidth = signalWidget.value.dimensions.width;
-    const maxWidth = Math.floor(parentWidth - (MIN_SIZE.width / 2));
+    const maxWidth = Math.floor(parentWidth - MIN_SIZE.width / 2);
 
     const handleMouseMove = (e: MouseEvent) => {
       const delta = startX - e.clientX;
@@ -475,28 +573,42 @@ export const ComponentsTree = () => {
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [updateContainerWidths]);
+  }, []);
 
   const onMouseLeave = useCallback(() => {
     refIsHovering.current = false;
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
-    const buildTreeFromElements = (
-      elements: Array<{ element: HTMLElement; depth: number; name: string }>,
-    ) => {
+    const buildTreeFromElements = (elements: Array<InspectableElement>) => {
       const nodeMap = new Map<HTMLElement, TreeNode>();
       const rootNodes: TreeNode[] = [];
 
-      for (const { element, name } of elements) {
+      for (const { element, name, fiber } of elements) {
+        if (!element) continue;
+
+        let title = name;
+        const { name: componentName, wrappers } = getExtendedDisplayName(fiber);
+        if (componentName) {
+          if (wrappers.length > 0) {
+            title = `${wrappers.join('(')}(${componentName})${')'.repeat(wrappers.length)}`;
+          } else {
+            title = componentName;
+          }
+        }
+
         nodeMap.set(element, {
-          label: name,
+          label: componentName || name,
+          title,
           children: [],
           element,
+          fiber,
         });
       }
 
       for (const { element, depth } of elements) {
+        if (!element) continue;
         const node = nodeMap.get(element);
         if (!node) continue;
 
@@ -507,7 +619,7 @@ export const ComponentsTree = () => {
           while (parent) {
             const parentNode = nodeMap.get(parent);
             if (parentNode) {
-              if (!parentNode.children) parentNode.children = [];
+              parentNode.children = parentNode.children || [];
               parentNode.children.push(node);
               break;
             }
@@ -519,34 +631,20 @@ export const ComponentsTree = () => {
       return rootNodes;
     };
 
-    const updateTree = (element: HTMLElement) => {
-      if (!refInitialElement.current) {
-        refInitialElement.current = element;
-      }
+    const updateTree = () => {
+      const element = refSelectedElement.current;
+      if (!element) return;
 
-      const inspectableElements = getInspectableElements(
-        refInitialElement.current as HTMLElement,
-      );
+      const inspectableElements = getInspectableElements(element);
       const tree = buildTreeFromElements(inspectableElements);
 
       if (tree.length > 0) {
         const flattened = flattenTree(tree);
-        setFlattenedNodes(flattened);
+        refFlattenedNodes.current = flattened;
         buildSearchIndex(flattened);
 
         const newMaxDepth = getMaxDepth(flattened);
-        setMaxTreeDepth(newMaxDepth);
-
-        if (refContainer.current) {
-          const indentSize = calculateIndentSize(
-            refContainer.current.offsetWidth,
-            newMaxDepth,
-          );
-          refContainer.current.style.setProperty(
-            '--indentation-size',
-            `${indentSize(0)}px`,
-          );
-        }
+        refMaxTreeDepth.current = newMaxDepth;
 
         setExpandedNodes((prev) => {
           const next = new Set(prev);
@@ -555,42 +653,47 @@ export const ComponentsTree = () => {
           }
           return next;
         });
+
+        updateContainerWidths(signalWidget.value.componentsTree.width);
       }
     };
 
-    const handleStoreUpdate = (state: typeof Store.inspectState.value) => {
-      if (state.kind !== 'focused') return;
-      updateTree(state.focusedDomElement as HTMLElement);
-    };
+    const unsubscribeStore = Store.inspectState.subscribe((state) => {
+      if (state.kind === 'focused') {
+        if (signalSkipTreeUpdate.value) {
+          return;
+        }
 
-    handleStoreUpdate(Store.inspectState.value);
-
-    const unsubscribeStore = Store.inspectState.subscribe(handleStoreUpdate);
-    const unsubscribeSignal = inspectedElementSignal.subscribe((element) => {
-      if (element) {
-        refInitialElement.current = element;
-        updateTree(element as HTMLElement);
+        handleOnChangeSearch('');
+        setSelectedIndex(0);
+        refSelectedElement.current = state.focusedDomElement as HTMLElement;
+        updateTree();
       }
     });
+
+    let rafId = 0;
     const unsubscribeUpdates = inspectorUpdateSignal.subscribe(() => {
-      handleStoreUpdate(Store.inspectState.value);
+      if (Store.inspectState.value.kind === 'focused') {
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          signalSkipTreeUpdate.value = false;
+          updateTree();
+        });
+      }
     });
 
     return () => {
       unsubscribeStore();
-      unsubscribeSignal();
       unsubscribeUpdates();
-    };
-  }, [buildSearchIndex]);
 
-  useEffect(() => {
-    const unsubscribe = signalWidget.subscribe((widget) => {
-      updateContainerWidths(widget.componentsTree.width);
-    });
-    return () => {
-      unsubscribe();
+      searchState.value = {
+        query: '',
+        matches: [],
+        currentMatchIndex: -1,
+      };
     };
-  }, [updateContainerWidths]);
+  }, []);
+
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -654,7 +757,7 @@ export const ComponentsTree = () => {
     const getVisibleNodes = () => {
       const visible: FlattenedNode[] = [];
 
-      for (const node of flattenedNodes) {
+      for (const node of refFlattenedNodes.current) {
         if (!node.parentId) {
           visible.push(node);
           continue;
@@ -668,7 +771,7 @@ export const ComponentsTree = () => {
             isVisible = false;
             break;
           }
-          const parentNode = flattenedNodes.find(
+          const parentNode = refFlattenedNodes.current.find(
             (n) => n.nodeId === currentParentId,
           );
           if (!parentNode) break;
@@ -684,7 +787,7 @@ export const ComponentsTree = () => {
     };
 
     setVisibleNodes(getVisibleNodes());
-  }, [flattenedNodes, expandedNodes]);
+  }, [expandedNodes]);
 
   useEffect(() => {
     return searchState.subscribe(setSearchValue);
@@ -692,21 +795,37 @@ export const ComponentsTree = () => {
 
   return (
     <>
-      <div
-        className={cn('relative', 'resize-v-line')}
-        onMouseDown={handleResize}
-      >
+      <div onMouseDown={handleResize} className="relative resize-v-line">
         <span>
           <Icon name="icon-ellipsis" size={18} />
         </span>
       </div>
       <div ref={refMainContainer} className="flex flex-col h-full">
         <div ref={refBreadcrumbContainer} className="overflow-hidden">
-          <Breadcrumb />
+          <Breadcrumb selectedElement={refSelectedElement.current} />
 
           <div className="py-2 pr-2 border-b border-[#1e1e1e]">
             <div
               ref={refSearchInputContainer}
+              title={`Search components by:
+
+• Component name (e.g. "Button")
+  - Matches any part of the name
+  - Case insensitive
+
+• Regular expression (e.g. "/^Button/")
+  - Wrap in forward slashes
+  - Case insensitive
+
+• Wrapper type (e.g. "[memo,forward]")
+  - Available types:
+    • memo - Memoized component
+    • forwardRef - Forwards refs to DOM or components
+    • lazy - Code-split component
+    • suspense - Loading boundary
+  - Can use partial types (e.g. "for" matches "forwardRef")
+  - Multiple types with comma
+`}
               className={cn(
                 'relative',
                 'flex items-center gap-x-1 px-2',
@@ -719,7 +838,11 @@ export const ComponentsTree = () => {
                 'overflow-hidden',
               )}
             >
-              <Icon name="icon-search" size={12} className=' text-neutral-500' />
+              <Icon
+                name="icon-search"
+                size={12}
+                className=" text-neutral-500"
+              />
               <div className="relative flex-1 h-7 overflow-hidden">
                 <input
                   ref={refSearchInput}
@@ -730,74 +853,66 @@ export const ComponentsTree = () => {
                     e.currentTarget.focus();
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.shiftKey) {
-                      e.preventDefault();
-                      navigateSearch('prev');
-                    } else if (e.key === 'Enter') {
-                      e.preventDefault();
-                      navigateSearch('next');
+                    if (e.key === 'Escape') {
+                      e.currentTarget.blur();
                     }
                   }}
                   onChange={handleInputChange}
                   className="absolute inset-y-0 inset-x-1"
-                  placeholder="(text or /regex/)"
+                  placeholder="Component name, /regex/, or [type]"
                 />
               </div>
-              {
-                searchState.value.query && (
-                  <>
-                    <span className="flex items-center gap-x-0.5 text-xs text-neutral-500">
-                      {searchState.value.currentMatchIndex + 1}
-                      {'|'}
-                      {searchState.value.matches.length}
-                    </span>
-                    {
-                      !!searchState.value.matches.length && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigateSearch('prev');
-                            }}
-                            className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
-                          >
-                            <Icon
-                              name="icon-chevron-right"
-                              className="-rotate-90"
-                              size={12}
-                            />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigateSearch('next');
-                            }}
-                            className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
-                          >
-                            <Icon
-                              name="icon-chevron-right"
-                              className="rotate-90"
-                              size={12}
-                            />
-                          </button>
-                        </>
-                      )
-                    }
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOnChangeSearch('');
-                      }}
-                      className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
-                    >
-                      <Icon name="icon-close" size={12} />
-                    </button>
-                  </>
-                )
-              }
+              {searchState.value.query && (
+                <>
+                  <span className="flex items-center gap-x-0.5 text-xs text-neutral-500">
+                    {searchState.value.currentMatchIndex + 1}
+                    {'|'}
+                    {searchState.value.matches.length}
+                  </span>
+                  {!!searchState.value.matches.length && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigateSearch('prev');
+                        }}
+                        className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
+                      >
+                        <Icon
+                          name="icon-chevron-right"
+                          className="-rotate-90"
+                          size={12}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigateSearch('next');
+                        }}
+                        className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
+                      >
+                        <Icon
+                          name="icon-chevron-right"
+                          className="rotate-90"
+                          size={12}
+                        />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOnChangeSearch('');
+                    }}
+                    className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
+                  >
+                    <Icon name="icon-close" size={12} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -832,7 +947,7 @@ export const ComponentsTree = () => {
                       {
                         'text-neutral-300 bg-[#5f3f9a]/40 hover:bg-[#5f3f9a]/40':
                           isSelected || isKeyboardSelected,
-                      }
+                      },
                     )}
                     style={{
                       top: virtualItem.start,

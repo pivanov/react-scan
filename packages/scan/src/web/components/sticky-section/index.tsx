@@ -43,6 +43,9 @@ export const StickySection = memo(({ children }: StickyProps) => {
   const refSticky = useCallback(
     (node: HTMLElement | null) => {
       if (!node) {
+        requestAnimationFrame(() => {
+          calculateStickyTop();
+        });
         return;
       }
 

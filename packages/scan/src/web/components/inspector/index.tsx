@@ -8,14 +8,14 @@ import { constant } from '~web/utils/preact/constant';
 import { Icon } from '../icon';
 import { StickySection } from '../sticky-section';
 import { flashManager } from './flash-overlay';
-import { PropertySection } from './propeties';
+import { PropertySection } from './properties';
 import {
   type TimelineUpdate,
   inspectorUpdateSignal,
   timelineActions,
 } from './states';
 import { collectInspectorData, getStateNames, resetTracking } from './timeline/utils';
-import { extractMinimalFiberInfo } from './utils';
+import { extractMinimalFiberInfo, getCompositeFiberFromElement } from './utils';
 import { WhatChangedSection } from './what-changed';
 
 export const globalInspectorState = {
@@ -109,19 +109,19 @@ export const Inspector = constant(() => {
         signalIsSettingsOpen.value = false;
       }
 
-      const fiber = state.fiber;
+      const { parentCompositeFiber } = getCompositeFiberFromElement(
+        state.focusedDomElement,
+      );
 
-      if (!fiber) return;
 
-      const isNewComponent =
-        refLastInspectedFiber.current?.type !== fiber.type ||
-        refLastInspectedFiber.current?.key !== fiber.key ||
-        refLastInspectedFiber.current?.index !== fiber.index;
+      if (!parentCompositeFiber) return;
+
+      const isNewComponent = refLastInspectedFiber.current?.type !== parentCompositeFiber.type;
 
       if (isNewComponent) {
-        refLastInspectedFiber.current = fiber;
+        refLastInspectedFiber.current = parentCompositeFiber;
         globalInspectorState.cleanup();
-        processUpdate(fiber);
+        processUpdate(parentCompositeFiber);
       }
     });
 
@@ -133,16 +133,18 @@ export const Inspector = constant(() => {
         return;
       }
 
-      const fiber = inspectState.fiber;
+      const { parentCompositeFiber } = getCompositeFiberFromElement(
+        inspectState.focusedDomElement,
+      );
 
-      if (!fiber) {
+      if (!parentCompositeFiber) {
         Store.inspectState.value = {
           kind: 'inspect-off',
         };
         return;
       }
 
-      processUpdate(fiber);
+      processUpdate(parentCompositeFiber);
 
       if (!inspectState.focusedDomElement.isConnected) {
         refLastInspectedFiber.current = null;

@@ -442,6 +442,7 @@ export interface InspectableElement {
   element: HTMLElement;
   depth: number;
   name: string;
+  fiber: Fiber;
 }
 
 export const getInspectableElements = (
@@ -473,6 +474,7 @@ export const getInspectableElements = (
         element: inspectable,
         depth,
         name: getDisplayName(parentCompositeFiber.type) ?? 'Unknown',
+        fiber: parentCompositeFiber,
       });
     }
 
@@ -520,6 +522,7 @@ export const getInspectableAncestors = (
           element: inspectable,
           depth: 0,
           name: getDisplayName(fiber.type) ?? 'Unknown',
+          fiber,
         });
       }
     }
@@ -1575,19 +1578,10 @@ export const isDirectComponent = (fiber: Fiber): boolean => {
 };
 
 export const isPromise = (value: unknown): value is Promise<unknown> => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  try {
-    return (
-      value instanceof Promise ||
-      ('then' in value &&
-        typeof (value as { then: unknown }).then === 'function')
-    );
-  } catch {
-    return false;
-  }
+  return (
+    !!value &&
+    (value instanceof Promise || (typeof value === 'object' && 'then' in value))
+  );
 };
 
 export const ensureRecord = (

@@ -1,13 +1,11 @@
-import { getDisplayName } from 'bippy';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import type { Fiber } from 'bippy';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Store } from '~core/index';
 import { signalIsSettingsOpen } from '~web/state';
-import { cn } from '~web/utils/helpers';
+import { cn, getExtendedDisplayName } from '~web/utils/helpers';
 import { Icon } from '../icon';
 import { timelineState } from '../inspector/states';
-import {
-  getOverrideMethods,
-} from '../inspector/utils';
+import { getOverrideMethods } from '../inspector/utils';
 
 // const REPLAY_DELAY_MS = 300;
 
@@ -100,23 +98,22 @@ export const BtnReplay = () => {
 // };
 
 const HeaderInspect = () => {
-  const refComponentName = useRef<HTMLSpanElement>(null);
   const refReRenders = useRef<HTMLSpanElement>(null);
   const refTiming = useRef<HTMLSpanElement>(null);
   const isSettingsOpen = signalIsSettingsOpen.value;
+  const [currentFiber, setCurrentFiber] = useState<Fiber | null>(null);
 
   useEffect(() => {
     const unSubState = Store.inspectState.subscribe((state) => {
-      if (state.kind !== 'focused' || !refComponentName.current) return;
+      if (state.kind !== 'focused') return;
 
       const fiber = state.fiber;
       if (!fiber) return;
 
-      const displayName = getDisplayName(fiber.type);
-      refComponentName.current.dataset.text = displayName ?? 'Unknown';
+      setCurrentFiber(fiber);
     });
 
-    return () => unSubState();
+    return unSubState;
   }, []);
 
   useEffect(() => {
@@ -124,27 +121,23 @@ const HeaderInspect = () => {
       if (Store.inspectState.value.kind !== 'focused') return;
       if (!refReRenders.current || !refTiming.current) return;
 
-      const {
-        totalUpdates,
-        currentIndex,
-        updates,
-        isVisible,
-        windowOffset,
-      } = state;
+      const { totalUpdates, currentIndex, updates, isVisible, windowOffset } =
+        state;
 
       const reRenders = Math.max(0, totalUpdates - 1);
       const headerText = isVisible
         ? `#${windowOffset + currentIndex} Re-render`
         : `${reRenders} Re-renders`;
 
-      let formattedTime = '';
+      let formattedTime: string | undefined;
       if (reRenders > 0 && currentIndex >= 0 && currentIndex < updates.length) {
         const time = updates[currentIndex]?.fiberInfo?.selfTime;
-        formattedTime = time > 0
-          ? time < 0.1 - Number.EPSILON
-            ? '< 0.1ms'
-            : `${Number(time.toFixed(1))}ms`
-          : '';
+        formattedTime =
+          time > 0
+            ? time < 0.1 - Number.EPSILON
+              ? '< 0.1ms'
+              : `${Number(time.toFixed(1))}ms`
+            : undefined;
       }
 
       refReRenders.current.dataset.text = `${headerText}${reRenders > 0 && formattedTime ? ' •' : ''}`;
@@ -153,8 +146,59 @@ const HeaderInspect = () => {
       }
     });
 
-    return () => unSubTimeline();
+    return unSubTimeline;
   }, []);
+
+  const componentName = useMemo(() => {
+    if (!currentFiber) return null;
+    const { name, wrappers, wrapperTypes } = getExtendedDisplayName(currentFiber);
+
+    const title = wrappers.length
+      ? `${wrappers.join('(')}(${name})${')'.repeat(wrappers.length)}`
+      : name ?? '';
+
+    const firstWrapperType = wrapperTypes[0];
+    return (
+      <span
+        title={title}
+        className="flex items-center gap-x-1"
+      >
+        {name ?? 'Unknown'}
+        <span className="flex items-center gap-x-1 text-[10px] text-purple-400">
+          {
+            !!firstWrapperType && (
+              <span
+                key={firstWrapperType.type}
+                title={firstWrapperType.title}
+                className={cn(
+                  'rounded py-[1px] px-1',
+                  'truncate',
+                  {
+                    'bg-purple-800 text-neutral-400': firstWrapperType.compiler,
+                    'bg-neutral-700 text-neutral-300': !firstWrapperType.compiler,
+                    'bg-[#5f3f9a] text-white': firstWrapperType.type === 'memo',
+                  }
+                )}
+              >
+                {firstWrapperType.type}
+                {firstWrapperType.compiler && '✦'}
+              </span>
+            )
+          }
+        </span>
+        {
+          wrapperTypes.length > 1 && (
+            <span className="text-[10px] text-neutral-400">
+              ×{wrapperTypes.length - 1}
+            </span>
+          )
+        }
+        <samp className="text-neutral-500">
+          {' • '}
+        </samp>
+      </span>
+    );
+  }, [currentFiber]);
 
   return (
     <div
@@ -167,17 +211,14 @@ const HeaderInspect = () => {
         },
       )}
     >
-      <span ref={refComponentName} className="with-data-text" />
+      {componentName}
       <div className="flex items-center gap-x-2 mr-auto text-xs text-[#888]">
         <span
           ref={refReRenders}
           className="with-data-text cursor-pointer !overflow-visible"
           title="Click to toggle between rerenders and total renders"
         />
-        <span
-          ref={refTiming}
-          className="with-data-text !overflow-visible"
-        />
+        <span ref={refTiming} className="with-data-text !overflow-visible" />
       </div>
     </div>
   );

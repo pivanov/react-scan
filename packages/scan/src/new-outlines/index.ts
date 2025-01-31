@@ -435,7 +435,7 @@ export const initReactScanInstrumentation = () => {
     onCommitStart: () => {
       ReactScanInternals.options.value.onCommitStart?.();
     },
-    onActive() {
+    onActive: () => {
       if (hasStopped()) return;
 
       const host = getCanvasEl();
@@ -448,7 +448,7 @@ export const initReactScanInstrumentation = () => {
       startReportInterval();
       logIntro();
     },
-    onError() {
+    onError: () => {
       // todo: ingest errors without accidentally collecting data about user
     },
     isValidFiber,

@@ -31,7 +31,10 @@ export const Slider = ({
     refThumb.current.style.setProperty('left', `${percentage}%`);
   }, [min, max]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
+  /**
+   * biome-ignore lint/correctness/useExhaustiveDependencies:
+   * we rely on min, max and value to update the thumb position
+   */
   useEffect(() => {
     updateThumbPosition(value);
   }, [min, max, value]);

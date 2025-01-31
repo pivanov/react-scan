@@ -393,6 +393,7 @@ export const Widget = () => {
                 'bg-[#0A0A0A]',
                 'transition-opacity delay-150',
                 'overflow-hidden',
+                'border-b border-white/10',
               )}
             >
               {

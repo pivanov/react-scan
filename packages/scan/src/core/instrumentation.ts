@@ -419,6 +419,7 @@ export const isRenderUnnecessary = (fiber: Fiber) => {
 
 const TRACK_UNNECESSARY_RENDERS = false;
 
+
 export const createInstrumentation = (
   instanceKey: string,
   config: InstrumentationConfig,
@@ -435,6 +436,7 @@ export const createInstrumentation = (
   });
   if (!inited) {
     inited = true;
+
     instrument({
       name: 'react-scan',
       onActive: config.onActive,
@@ -471,13 +473,14 @@ export const createInstrumentation = (
             const changes: Array<Change> = [];
 
             if (allInstances.some((instance) => instance.config.trackChanges)) {
-              const { changes: changesProps } = collectPropsChanges(fiber);
-              const { changes: changesState } = collectStateChanges(fiber);
-              const { changes: changesContext } = collectContextChanges(fiber);
+              const changesProps = collectPropsChanges(fiber).changes;
+              const changesState = collectStateChanges(fiber).changes;
+              const changesContext = collectContextChanges(fiber).changes;
 
               // Convert props changes
-              changes.push(
-                ...changesProps.map(
+              changes.push.apply(
+                null,
+                changesProps.map(
                   (change) =>
                     ({
                       type: ChangeReason.Props,
@@ -505,8 +508,9 @@ export const createInstrumentation = (
               }
 
               // Convert context changes
-              changes.push(
-                ...changesContext.map(
+              changes.push.apply(
+                null,
+                changesContext.map(
                   (change) =>
                     ({
                       type: ChangeReason.Context,

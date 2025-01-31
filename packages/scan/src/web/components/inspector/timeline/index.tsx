@@ -22,8 +22,12 @@ export const Timeline = memo(({
   const refPlayInterval = useRef<number | null>(null);
   const refChangeInterval = useRef<number | null>(null);
 
-  const { currentIndex, isVisible, totalUpdates, updates } =
-    timelineState.value;
+  const {
+    currentIndex,
+    isVisible,
+    totalUpdates,
+    updates,
+  } = timelineState.value;
 
   const sliderValues = useMemo(() => {
     return calculateSliderValues(totalUpdates, currentIndex);
@@ -74,6 +78,10 @@ export const Timeline = memo(({
     return null;
   }
 
+  if (totalUpdates <= 1) {
+    return null;
+  }
+
   return (
     <button
       ref={refSticky}
@@ -110,11 +118,7 @@ export const Timeline = memo(({
               </div>
             </>
           )
-          : (
-            <>
-              View Re-renders History
-            </>
-          )
+          : 'View Re-renders History'
       }
     </button>
   );

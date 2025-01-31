@@ -235,8 +235,6 @@ export const reactScanComponentNamePlugin = (options?: Options): PluginObj => ({
   visitor: {
     Program(path) {
       const assignedNames = getAssignedDisplayNames(path);
-      // biome-ignore lint/correctness/noUnusedVariables: @pivanov => @Alexis do we need this?
-      let count = 0;
       path.traverse({
         ClassDeclaration(path) {
           if (isReactClassComponent(path)) {
@@ -247,12 +245,7 @@ export const reactScanComponentNamePlugin = (options?: Options): PluginObj => ({
             if (assignedNames.has(name)) {
               return;
             }
-            assignDisplayName(
-              path,
-              name,
-              options?.flags?.noTryCatchDisplayNames,
-            );
-            count++;
+            assignDisplayName(path, name, options?.flags?.noTryCatchDisplayNames);
           }
         },
         FunctionDeclaration(path) {
@@ -275,12 +268,7 @@ export const reactScanComponentNamePlugin = (options?: Options): PluginObj => ({
             if (assignedNames.has(name)) {
               return;
             }
-            assignDisplayName(
-              path,
-              name,
-              options?.flags?.noTryCatchDisplayNames,
-            );
-            count++;
+            assignDisplayName(path, name, options?.flags?.noTryCatchDisplayNames);
           }
         },
         VariableDeclarator(path) {
@@ -304,7 +292,6 @@ export const reactScanComponentNamePlugin = (options?: Options): PluginObj => ({
                 name,
                 options?.flags?.noTryCatchDisplayNames,
               );
-              count++;
             }
           }
         },
