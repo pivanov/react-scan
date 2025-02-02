@@ -164,25 +164,31 @@ const HeaderInspect = () => {
         className="flex items-center gap-x-1"
       >
         {name ?? 'Unknown'}
-        <span className="flex items-center gap-x-1 text-[10px] text-purple-400">
+        <span
+          title={firstWrapperType?.title}
+          className="flex items-center gap-x-1 text-[10px] text-purple-400"
+        >
           {
             !!firstWrapperType && (
-              <span
-                key={firstWrapperType.type}
-                title={firstWrapperType.title}
-                className={cn(
-                  'rounded py-[1px] px-1',
-                  'truncate',
-                  {
-                    'bg-purple-800 text-neutral-400': firstWrapperType.compiler,
-                    'bg-neutral-700 text-neutral-300': !firstWrapperType.compiler,
-                    'bg-[#5f3f9a] text-white': firstWrapperType.type === 'memo',
-                  }
+              <>
+                <span
+                  key={firstWrapperType.type}
+                  className={cn(
+                    'rounded py-[1px] px-1',
+                    'truncate',
+                    {
+                      'bg-purple-800 text-neutral-400': firstWrapperType.compiler,
+                      'bg-neutral-700 text-neutral-300': !firstWrapperType.compiler,
+                      'bg-[#5f3f9a] text-white': firstWrapperType.type === 'memo',
+                    }
+                  )}
+                >
+                  {firstWrapperType.type}
+                </span>
+                {firstWrapperType.compiler && (
+                  <span className="text-yellow-300">✨</span>
                 )}
-              >
-                {firstWrapperType.type}
-                {firstWrapperType.compiler && '✦'}
-              </span>
+              </>
             )
           }
         </span>

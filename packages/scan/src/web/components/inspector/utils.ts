@@ -130,20 +130,21 @@ export const getNearestFiberFromElement = (
   }
 };
 
-export const getParentCompositeFiber = (fiber: Fiber) => {
-  let curr: Fiber | null = fiber;
-  let prevHost = null;
+export const getParentCompositeFiber = (
+  fiber: Fiber,
+): readonly [Fiber, Fiber | null] | null => {
+  let current: Fiber | null = fiber;
+  let prevHost: Fiber | null = null;
 
-  while (curr) {
-    if (isCompositeFiber(curr)) {
-      return [curr, prevHost] as const;
-    }
-    if (isHostFiber(curr)) {
-      prevHost = curr;
-    }
-    curr = curr.return;
+  while (current) {
+    if (isCompositeFiber(current)) return [current, prevHost] as const;
+    if (isHostFiber(current) && !prevHost) prevHost = current;
+    current = current.return;
   }
+
+  return null;
 };
+
 
 const isFiberInTree = (fiber: Fiber, root: Fiber): boolean => {
   {
@@ -221,28 +222,28 @@ export const getCompositeComponentFromElement = (element: Element) => {
   };
 };
 
-export const getCompositeFiberFromElement = (element: Element) => {
-  const associatedFiber = getNearestFiberFromElement(element);
+export const getCompositeFiberFromElement = (
+  element: Element,
+  knownFiber?: Fiber,
+) => {
+  if (!element.isConnected) return {};
 
-  if (!associatedFiber) return {};
-  const currentAssociatedFiber = isCurrentTree(associatedFiber)
-    ? associatedFiber
-    : (associatedFiber.alternate ?? associatedFiber);
-  const stateNode = getFirstStateNode(currentAssociatedFiber);
-  if (!stateNode) return {};
+  let fiber = knownFiber ?? getNearestFiberFromElement(element);
+  if (!fiber) return {};
 
-  const anotherRes = getParentCompositeFiber(currentAssociatedFiber);
-  if (!anotherRes) {
-    return {};
-  }
-  let [parentCompositeFiber] = anotherRes;
-  parentCompositeFiber =
-    (isCurrentTree(parentCompositeFiber)
-      ? parentCompositeFiber
-      : parentCompositeFiber.alternate) ?? parentCompositeFiber;
+  // Get the current associated fiber
+  fiber = isCurrentTree(fiber) ? fiber : (fiber.alternate ?? fiber);
+
+  if (!getFirstStateNode(fiber)) return {};
+
+  // Fetch the parent composite fiber efficiently
+  const parentCompositeFiber = getParentCompositeFiber(fiber)?.[0];
+  if (!parentCompositeFiber) return {};
 
   return {
-    parentCompositeFiber,
+    parentCompositeFiber: isCurrentTree(parentCompositeFiber)
+      ? parentCompositeFiber
+      : (parentCompositeFiber.alternate ?? parentCompositeFiber),
   };
 };
 

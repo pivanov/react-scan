@@ -111,6 +111,7 @@ export const Inspector = constant(() => {
 
       const { parentCompositeFiber } = getCompositeFiberFromElement(
         state.focusedDomElement,
+        state.fiber
       );
 
 
@@ -135,6 +136,7 @@ export const Inspector = constant(() => {
 
       const { parentCompositeFiber } = getCompositeFiberFromElement(
         inspectState.focusedDomElement,
+        inspectState.fiber
       );
 
       if (!parentCompositeFiber) {

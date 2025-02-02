@@ -521,6 +521,7 @@ export const createInstrumentation = (
                 ),
               );
             }
+
             const { selfTime } = getTimings(fiber);
 
             const fps = getFPS();

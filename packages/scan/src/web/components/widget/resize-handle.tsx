@@ -284,12 +284,26 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
       position: newPosition,
     };
 
+    // Adjust components tree width when widget is resized
+    const maxTreeWidth = Math.floor(newWidth - (MIN_SIZE.width / 2));
+    const currentTreeWidth = signalWidget.value.componentsTree.width;
+    const defaultWidth = Math.floor(newWidth * 0.3); // Use 30% of window width as default
+
+    const newTreeWidth = isCurrentFullWidth
+      ? MIN_CONTAINER_WIDTH
+      : (position === 'left' || position === 'right') && !isCurrentFullWidth
+        ? Math.min(maxTreeWidth, Math.max(MIN_CONTAINER_WIDTH, defaultWidth))
+        : Math.min(maxTreeWidth, Math.max(MIN_CONTAINER_WIDTH, currentTreeWidth));
+
     requestAnimationFrame(() => {
       signalWidget.value = {
         corner: newCorner,
         dimensions: newDimensions,
         lastDimensions: dimensions,
-        componentsTree: signalWidget.value.componentsTree,
+        componentsTree: {
+          ...signalWidget.value.componentsTree,
+          width: newTreeWidth,
+        },
       };
 
       containerStyle.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
@@ -302,6 +316,10 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
       corner: newCorner,
       dimensions: newDimensions,
       lastDimensions: dimensions,
+      componentsTree: {
+        ...signalWidget.value.componentsTree,
+        width: newTreeWidth,
+      },
     });
   }, []);
 

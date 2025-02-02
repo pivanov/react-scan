@@ -24,12 +24,11 @@ import {
   getExtendedDisplayName,
   saveLocalStorage,
 } from '~web/utils/helpers';
+import { getFiberPath } from '~web/utils/pin';
 import { getCompositeComponentFromElement } from '../../inspector/utils';
 import { Breadcrumb } from './breadcrumb';
 import {
   type FlattenedNode,
-  SEARCH_PREFIX_LENGTH,
-  type SearchIndex,
   type TreeNode,
   searchState,
   signalSkipTreeUpdate,
@@ -41,9 +40,9 @@ const flattenTree = (
   parentPath: string | null = null,
 ): FlattenedNode[] => {
   return nodes.reduce<FlattenedNode[]>((acc, node, index) => {
-    const nodePath = parentPath
-      ? `${parentPath}-${index}-${node.label}`
-      : `${index}-${node.label}`;
+    const nodePath = node.element
+      ? getFiberPath(node.fiber)
+      : `${parentPath}-${index}`;
 
     const flatNode: FlattenedNode = {
       ...node,
@@ -68,37 +67,170 @@ const getMaxDepth = (nodes: FlattenedNode[]): number => {
 
 const calculateIndentSize = (containerWidth: number, maxDepth: number) => {
   const MIN_INDENT = 0;
-  const MAX_INDENT = 16;
+  const MAX_INDENT = 24;
+  const MIN_TOTAL_INDENT = 24; // Minimum total indentation we want to preserve
 
-  const availableSpace = containerWidth - MIN_CONTAINER_WIDTH;
+  if (maxDepth <= 0) return MAX_INDENT;
 
-  if (maxDepth > 0) {
-    const baseIndent = Math.min(MAX_INDENT, availableSpace / (maxDepth + 1));
+  const availableSpace = Math.max(0, containerWidth - MIN_CONTAINER_WIDTH);
 
-    const scaleFactor = Math.max(0.4, 1 - maxDepth * 0.1);
-    return Math.max(MIN_INDENT, baseIndent * scaleFactor);
-  }
+  // If we have very little space, use minimal indentation
+  if (availableSpace < MIN_TOTAL_INDENT) return MIN_INDENT;
 
-  return MAX_INDENT;
+  // Otherwise, calculate based on available space
+  const targetTotalIndent = Math.min(availableSpace * 0.3, maxDepth * MAX_INDENT);
+  const baseIndent = targetTotalIndent / maxDepth;
+
+  return Math.max(MIN_INDENT, Math.min(MAX_INDENT, baseIndent));
 };
 
 interface TreeNodeItemProps {
   node: FlattenedNode;
   onElementClick?: (element: HTMLElement) => void;
-  expandedNodes: Set<string>;
+  collapsedNodes: Set<string>;
   onToggle: (nodeId: string) => void;
   searchValue: typeof searchState.value;
 }
 
+// Available wrapper types
+const VALID_TYPES = ['memo', 'forwardRef', 'lazy', 'suspense'];
+
+const parseTypeSearch = (query: string) => {
+  const typeMatch = query.match(/\[(.*?)\]/);
+  if (!typeMatch) return null;
+
+  const typeSearches: string[] = [];
+  const parts = typeMatch[1].split(',');
+  for (const part of parts) {
+    const trimmed = part.trim().toLowerCase();
+    if (trimmed) typeSearches.push(trimmed);
+  }
+
+  return typeSearches;
+};
+
+const isValidTypeSearch = (typeSearches: string[]) => {
+  if (typeSearches.length === 0) return false;
+
+  for (const search of typeSearches) {
+    let isValid = false;
+    for (const validType of VALID_TYPES) {
+      if (validType.toLowerCase().includes(search)) {
+        isValid = true;
+        break;
+      }
+    }
+    if (!isValid) return false;
+  }
+  return true;
+};
+
+const matchesTypeSearch = (typeSearches: string[], wrapperTypes: Array<{ type: string }>) => {
+  if (typeSearches.length === 0) return true;
+  if (!wrapperTypes.length) return false;
+
+  for (const search of typeSearches) {
+    let foundMatch = false;
+    for (const wrapper of wrapperTypes) {
+      if (wrapper.type.toLowerCase().includes(search)) {
+        foundMatch = true;
+        break;
+      }
+    }
+    if (!foundMatch) return false;
+  }
+  return true;
+};
+
+const useNodeHighlighting = (node: FlattenedNode, searchValue: typeof searchState.value) => {
+  return useMemo(() => {
+    const { query, matches } = searchValue;
+    const isMatch = matches.some((match) => match.nodeId === node.nodeId);
+    const typeSearches = parseTypeSearch(query) || [];
+    const searchQuery = query ? query.replace(/\[.*?\]/, '').trim() : '';
+
+    if (!query || !isMatch) {
+      return {
+        highlightedText: <span className="truncate">{node.label}</span>,
+        typeHighlight: false
+      };
+    }
+
+    let matchesType = true;
+    if (typeSearches.length > 0) {
+      if (!node.fiber) {
+        matchesType = false;
+      } else {
+        const { wrapperTypes } = getExtendedDisplayName(node.fiber);
+        matchesType = matchesTypeSearch(typeSearches, wrapperTypes);
+      }
+    }
+
+    let textContent = <span className="truncate">{node.label}</span>;
+    if (searchQuery) {
+      try {
+        if (searchQuery.startsWith('/') && searchQuery.endsWith('/')) {
+          const pattern = searchQuery.slice(1, -1);
+          const regex = new RegExp(`(${pattern})`, 'i');
+          const parts = node.label.split(regex);
+
+          textContent = (
+            <span className="tree-node-search-highlight">
+              {parts.map((part, index) =>
+                regex.test(part) ? (
+                  <span
+                    key={`${node.nodeId}-${part}`}
+                    className={cn('regex', {
+                      start: regex.test(part) && index === 0,
+                      middle: regex.test(part) && index % 2 === 1,
+                      end: regex.test(part) && index === parts.length - 1,
+                      '!ml-0': index === 1,
+                    })}
+                  >
+                    {part}
+                  </span>
+                ) : (
+                  part
+                ),
+              )}
+            </span>
+          );
+        } else {
+          const lowerLabel = node.label.toLowerCase();
+          const lowerQuery = searchQuery.toLowerCase();
+          const index = lowerLabel.indexOf(lowerQuery);
+
+          if (index >= 0) {
+            textContent = (
+              <span className="tree-node-search-highlight">
+                {node.label.slice(0, index)}
+                <span className="single">
+                  {node.label.slice(index, index + searchQuery.length)}
+                </span>
+                {node.label.slice(index + searchQuery.length)}
+              </span>
+            );
+          }
+        }
+      } catch {}
+    }
+
+    return {
+      highlightedText: textContent,
+      typeHighlight: matchesType && typeSearches.length > 0
+    };
+  }, [node.label, node.nodeId, node.fiber, searchValue]);
+};
+
 const TreeNodeItem = ({
   node,
   onElementClick,
-  expandedNodes,
+  collapsedNodes,
   onToggle,
   searchValue,
 }: TreeNodeItemProps) => {
   const hasChildren = node.children && node.children.length > 0;
-  const isExpanded = expandedNodes.has(node.nodeId);
+  const isCollapsed = collapsedNodes.has(node.nodeId);
 
   const handleClick = useCallback(() => {
     if (node.element) {
@@ -112,85 +244,13 @@ const TreeNodeItem = ({
     }
   }, [hasChildren, node.nodeId, onToggle]);
 
-  const highlightedText = useMemo(() => {
-    const { query, matches } = searchValue;
-    const isMatch = matches.some((match) => match.nodeId === node.nodeId);
-
-    if (!query || !isMatch) {
-      return <span className="truncate">{node.label}</span>;
-    }
-
-    try {
-      if (query.startsWith('/') && query.endsWith('/')) {
-        const pattern = query.slice(1, -1);
-        const regex = new RegExp(`(${pattern})`, 'i');
-        const parts = node.label.split(regex);
-
-        return (
-          <span className="tree-node-search-highlight">
-            {parts.map((part, index) =>
-              regex.test(part) ? (
-                <span
-                  key={`${node.nodeId}-${part}`}
-                  className={cn('regex', {
-                    start: regex.test(part) && index === 0,
-                    middle: regex.test(part) && index % 2 === 1,
-                    end: regex.test(part) && index === parts.length - 1,
-                    '!ml-0': index === 1,
-                  })}
-                >
-                  {part}
-                </span>
-              ) : (
-                part
-              ),
-            )}
-          </span>
-        );
-      }
-
-      const lowerLabel = node.label.toLowerCase();
-      const lowerQuery = query.toLowerCase();
-      const index = lowerLabel.indexOf(lowerQuery);
-
-      if (index >= 0) {
-        return (
-          <span className="tree-node-search-highlight">
-            {node.label.slice(0, index)}
-            <span className="single">
-              {node.label.slice(index, index + query.length)}
-            </span>
-            {node.label.slice(index + query.length)}
-          </span>
-        );
-      }
-    } catch {}
-
-    return <span className="truncate">{node.label}</span>;
-  }, [node.label, node.nodeId, searchValue]);
+  const { highlightedText, typeHighlight } = useNodeHighlighting(node, searchValue);
 
   const componentTypes = useMemo(() => {
     if (!node.fiber) return null;
     const { wrapperTypes } = getExtendedDisplayName(node.fiber);
-
-    const typeSearches: string[] = [];
-    const { query } = searchValue;
-    const typeMatch = query.match(/\[(.*?)\]/);
-    if (typeMatch) {
-      typeSearches.push(
-        ...typeMatch[1].split(',').map((t) => t.trim().toLowerCase()),
-      );
-    }
-
     const firstWrapperType = wrapperTypes[0];
 
-    const isMatched =
-      typeSearches.length > 0 &&
-      typeSearches.every((search) =>
-        wrapperTypes.some((wrapperType) =>
-          wrapperType.type.toLowerCase().startsWith(search),
-        ),
-      );
     return (
       <span
         className={cn(
@@ -200,27 +260,31 @@ const TreeNodeItem = ({
         )}
       >
         {firstWrapperType && (
-          <span
-            key={firstWrapperType.type}
-            title={firstWrapperType.title}
-            className={cn(
-              'rounded py-[1px] px-1',
-              'bg-neutral-700 text-neutral-300',
-              'truncate',
-              {
-                'bg-[#8e61e3] text-white': firstWrapperType.type === 'memo',
-                'bg-yellow-300 text-black': isMatched,
-              },
+          <>
+            <span
+              key={firstWrapperType.type}
+              title={firstWrapperType?.title}
+              className={cn(
+                'rounded py-[1px] px-1',
+                'bg-neutral-700 text-neutral-300',
+                'truncate',
+                {
+                  'bg-[#8e61e3] text-white': firstWrapperType.type === 'memo',
+                  'bg-yellow-300 text-black': typeHighlight,
+                },
+              )}
+            >
+              {firstWrapperType.type}
+            </span>
+            {firstWrapperType.compiler && (
+              <span className="text-yellow-300 ml-1">✨</span>
             )}
-          >
-            {firstWrapperType.type}
-            {firstWrapperType.compiler && '✦'}
-          </span>
+          </>
         )}
         {wrapperTypes.length > 1 && `×${wrapperTypes.length - 1}`}
       </span>
     );
-  }, [node.fiber, searchValue]);
+  }, [node.fiber, typeHighlight]);
 
   return (
     <button
@@ -246,7 +310,7 @@ const TreeNodeItem = ({
             name="icon-chevron-right"
             size={12}
             className={cn('w-4 h-4', 'transition-transform', {
-              'rotate-90': isExpanded,
+              'rotate-90': !isCollapsed,
             })}
           />
         )}
@@ -263,21 +327,43 @@ export const ComponentsTree = () => {
   const refMainContainer = useRef<HTMLDivElement>(null);
   const refSearchInputContainer = useRef<HTMLDivElement>(null);
   const refSearchInput = useRef<HTMLInputElement>(null);
-  const refFlattenedNodes = useRef<FlattenedNode[]>([]);
   const refSelectedElement = useRef<HTMLElement | null>(null);
   const refMaxTreeDepth = useRef(0);
-
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-  const [visibleNodes, setVisibleNodes] = useState<FlattenedNode[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const refIsHovering = useRef(false);
+  const refIsResizing = useRef(false);
 
-  const refSearchIndex = useRef<SearchIndex>({
-    prefixMap: new Map(),
-    nodeMap: new Map(),
-    labelMap: new Map(),
-    PREFIX_LENGTH: SEARCH_PREFIX_LENGTH,
-  });
+  const [flattenedNodes, setFlattenedNodes] = useState<FlattenedNode[]>([]);
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [searchValue, setSearchValue] = useState(searchState.value);
+
+  const visibleNodes = useMemo(() => {
+    const visible: FlattenedNode[] = [];
+    const nodes = flattenedNodes;
+    const nodeMap = new Map(nodes.map((node) => [node.nodeId, node]));
+
+    for (const node of nodes) {
+      let isVisible = true;
+
+      let currentNode = node;
+      while (currentNode.parentId) {
+        const parent = nodeMap.get(currentNode.parentId);
+        if (!parent) break;
+
+        if (collapsedNodes.has(parent.nodeId)) {
+          isVisible = false;
+          break;
+        }
+        currentNode = parent;
+      }
+
+      if (isVisible) {
+        visible.push(node);
+      }
+    }
+
+    return visible;
+  }, [collapsedNodes, flattenedNodes]);
 
   const ITEM_HEIGHT = 28;
 
@@ -287,32 +373,6 @@ export const ComponentsTree = () => {
     estimateSize: () => ITEM_HEIGHT,
     overscan: 5,
   });
-
-  const [searchValue, setSearchValue] = useState(searchState.value);
-
-  const buildSearchIndex = useCallback((nodes: FlattenedNode[]) => {
-    const prefixMap = new Map<string, Set<string>>();
-    const nodeMap = new Map<string, FlattenedNode>();
-    const labelMap = new Map<string, string>();
-
-    for (const node of nodes) {
-      nodeMap.set(node.nodeId, node);
-      const lowerLabel = node.label.toLowerCase();
-      labelMap.set(node.nodeId, lowerLabel);
-
-      const prefix = lowerLabel.slice(0, SEARCH_PREFIX_LENGTH);
-      const nodeIds = prefixMap.get(prefix) || new Set();
-      nodeIds.add(node.nodeId);
-      prefixMap.set(prefix, nodeIds);
-    }
-
-    refSearchIndex.current = {
-      prefixMap,
-      nodeMap,
-      labelMap,
-      PREFIX_LENGTH: SEARCH_PREFIX_LENGTH,
-    };
-  }, []);
 
   const handleElementClick = useCallback(
     (element: HTMLElement) => {
@@ -361,7 +421,7 @@ export const ComponentsTree = () => {
   );
 
   const handleToggle = useCallback((nodeId: string) => {
-    setExpandedNodes((prev) => {
+    setCollapsedNodes((prev) => {
       const next = new Set(prev);
       if (next.has(nodeId)) {
         next.delete(nodeId);
@@ -372,66 +432,70 @@ export const ComponentsTree = () => {
     });
   }, []);
 
-  const handleOnChangeSearch = useCallback((query: string) => {
-    refSearchInputContainer.current?.classList.remove('!border-red-500');
-    const { prefixMap, nodeMap, labelMap, PREFIX_LENGTH } =
-      refSearchIndex.current;
-    const matches: FlattenedNode[] = [];
+  const handleOnChangeSearch = useCallback(
+    (query: string) => {
+      refSearchInputContainer.current?.classList.remove('!border-red-500');
+      const matches: FlattenedNode[] = [];
 
-    if (!query) {
-      searchState.value = { query, matches, currentMatchIndex: -1 };
-      return;
-    }
-
-    const isRegex = /^\/.*\/$/.test(query);
-    const isTypeSearch = /\[(.*?)\]/.test(query);
-
-    if (isRegex) {
-      try {
-        const pattern = query.slice(1, -1);
-        const regex = new RegExp(pattern, 'i');
-
-        for (const [id, label] of labelMap) {
-          if (regex.test(label)) {
-            const node = nodeMap.get(id);
-            if (node) matches.push(node);
-          }
-        }
-      } catch {
-        refSearchInputContainer.current?.classList.add('!border-red-500');
+      if (!query) {
+        searchState.value = { query, matches, currentMatchIndex: -1 };
+        return;
       }
-    } else if (isTypeSearch) {
-      const typeMatch = query.match(/\[(.*?)\]/);
-      if (!typeMatch) return;
 
-      const typeSearches = typeMatch[1]
-        .split(',')
-        .map((t) => t.trim().toLowerCase());
-      const regularSearch = query
-        .replace(/\[.*?\]/, '')
-        .trim()
-        .toLowerCase();
+      if (query.includes('[') && !query.includes(']')) {
+        if (query.length > query.indexOf('[') + 1) {
+          refSearchInputContainer.current?.classList.add('!border-red-500');
+          return;
+        }
+      }
 
-      for (const [id, node] of nodeMap) {
+      const typeSearches = parseTypeSearch(query) || [];
+      if (query.includes('[')) {
+        if (!isValidTypeSearch(typeSearches)) {
+          refSearchInputContainer.current?.classList.add('!border-red-500');
+          return;
+        }
+      }
+
+      const searchQuery = query.replace(/\[.*?\]/, '').trim();
+      const isRegex = /^\/.*\/$/.test(searchQuery);
+      let matchesLabel = (_label: string) => false;
+
+      if (searchQuery.startsWith('/') && !isRegex) {
+        if (searchQuery.length > 1) {
+          refSearchInputContainer.current?.classList.add('!border-red-500');
+          return;
+        }
+      }
+
+      if (isRegex) {
+        try {
+          const pattern = searchQuery.slice(1, -1);
+          const regex = new RegExp(pattern, 'i');
+          matchesLabel = (label: string) => regex.test(label);
+        } catch {
+          refSearchInputContainer.current?.classList.add('!border-red-500');
+          return;
+        }
+      } else if (searchQuery) {
+        const lowerQuery = searchQuery.toLowerCase();
+        matchesLabel = (label: string) =>
+          label.toLowerCase().includes(lowerQuery);
+      }
+
+      for (const node of flattenedNodes) {
         let matchesSearch = true;
 
-        if (typeSearches.length > 0 && node.fiber) {
-          const { wrapperTypes } = getExtendedDisplayName(node.fiber);
-          const nodeWrapperTypes = wrapperTypes.map((w) =>
-            w.type.toLowerCase(),
-          );
-
-          matchesSearch = typeSearches.every((search) =>
-            nodeWrapperTypes.some((type) => type.startsWith(search)),
-          );
-        } else if (typeSearches.length > 0) {
-          matchesSearch = false;
+        if (searchQuery) {
+          matchesSearch = matchesLabel(node.label);
         }
 
-        if (matchesSearch && regularSearch) {
-          const label = labelMap.get(id);
-          if (!label?.includes(regularSearch)) {
+        if (matchesSearch && typeSearches.length > 0) {
+          if (!node.fiber) {
             matchesSearch = false;
+          } else {
+            const { wrapperTypes } = getExtendedDisplayName(node.fiber);
+            matchesSearch = matchesTypeSearch(typeSearches, wrapperTypes);
           }
         }
 
@@ -439,34 +503,64 @@ export const ComponentsTree = () => {
           matches.push(node);
         }
       }
-    } else {
-      const lowerQuery = query.toLowerCase();
-      const searchPrefix = lowerQuery.slice(0, PREFIX_LENGTH);
 
-      const matchingIds = prefixMap.get(searchPrefix);
-      if (matchingIds) {
-        for (const id of matchingIds) {
-          const node = nodeMap.get(id);
-          const lowerLabel = labelMap.get(id);
-          if (node && lowerLabel?.includes(lowerQuery)) {
-            matches.push(node);
+      searchState.value = {
+        query,
+        matches,
+        currentMatchIndex: matches.length > 0 ? 0 : -1,
+      };
+
+      if (matches.length > 0) {
+        const firstMatch = matches[0];
+        const nodeIndex = visibleNodes.findIndex(
+          (node) => node.nodeId === firstMatch.nodeId,
+        );
+        if (nodeIndex !== -1) {
+          const itemTop = nodeIndex * ITEM_HEIGHT;
+          const container = refContainer.current;
+          if (container) {
+            const containerHeight = container.clientHeight;
+            container.scrollTo({
+              top: Math.max(0, itemTop - containerHeight / 2),
+              behavior: 'instant',
+            });
           }
         }
       }
-    }
+    },
+    [flattenedNodes, visibleNodes],
+  );
 
-    searchState.value = {
-      query,
-      matches,
-      currentMatchIndex: matches.length > 0 ? 0 : -1,
-    };
+  const handleInputChange = useCallback(
+    (e: Event) => {
+      const target = e.currentTarget as HTMLInputElement;
+      if (!target) return;
+      handleOnChangeSearch(target.value);
+    },
+    [handleOnChangeSearch],
+  );
 
-    if (matches.length > 0) {
-      const firstMatch = matches[0];
+  const navigateSearch = useCallback(
+    (direction: 'next' | 'prev') => {
+      const { matches, currentMatchIndex } = searchState.value;
+      if (matches.length === 0) return;
+
+      const newIndex =
+        direction === 'next'
+          ? (currentMatchIndex + 1) % matches.length
+          : (currentMatchIndex - 1 + matches.length) % matches.length;
+
+      searchState.value = {
+        ...searchState.value,
+        currentMatchIndex: newIndex,
+      };
+
+      const currentMatch = matches[newIndex];
       const nodeIndex = visibleNodes.findIndex(
-        (node) => node.nodeId === firstMatch.nodeId,
+        (node) => node.nodeId === currentMatch.nodeId,
       );
       if (nodeIndex !== -1) {
+        setSelectedIndex(nodeIndex);
         const itemTop = nodeIndex * ITEM_HEIGHT;
         const container = refContainer.current;
         if (container) {
@@ -477,46 +571,9 @@ export const ComponentsTree = () => {
           });
         }
       }
-    }
-  }, [visibleNodes.findIndex]);
-
-  const handleInputChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLInputElement;
-    if (!target) return;
-    handleOnChangeSearch(target.value);
-  }, [handleOnChangeSearch]);
-
-  const navigateSearch = useCallback((direction: 'next' | 'prev') => {
-    const { matches, currentMatchIndex } = searchState.value;
-    if (matches.length === 0) return;
-
-    const newIndex =
-      direction === 'next'
-        ? (currentMatchIndex + 1) % matches.length
-        : (currentMatchIndex - 1 + matches.length) % matches.length;
-
-    searchState.value = {
-      ...searchState.value,
-      currentMatchIndex: newIndex,
-    };
-
-    const currentMatch = matches[newIndex];
-    const nodeIndex = visibleNodes.findIndex(
-      (node) => node.nodeId === currentMatch.nodeId,
-    );
-    if (nodeIndex !== -1) {
-      setSelectedIndex(nodeIndex);
-      const itemTop = nodeIndex * ITEM_HEIGHT;
-      const container = refContainer.current;
-      if (container) {
-        const containerHeight = container.clientHeight;
-        container.scrollTo({
-          top: Math.max(0, itemTop - containerHeight / 2),
-          behavior: 'instant',
-        });
-      }
-    }
-  }, [visibleNodes]);
+    },
+    [visibleNodes],
+  );
 
   const updateContainerWidths = useCallback((width: number) => {
     if (refMainContainer.current) {
@@ -539,6 +596,8 @@ export const ComponentsTree = () => {
 
     if (!refContainer.current) return;
     refContainer.current.style.setProperty('pointer-events', 'none');
+
+    refIsResizing.current = true;
 
     const startX = e.clientX;
     const startWidth = refContainer.current.offsetWidth;
@@ -569,6 +628,8 @@ export const ComponentsTree = () => {
       };
 
       saveLocalStorage(LOCALSTORAGE_KEY, signalWidget.value);
+
+      refIsResizing.current = false;
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -640,21 +701,11 @@ export const ComponentsTree = () => {
 
       if (tree.length > 0) {
         const flattened = flattenTree(tree);
-        refFlattenedNodes.current = flattened;
-        buildSearchIndex(flattened);
-
         const newMaxDepth = getMaxDepth(flattened);
         refMaxTreeDepth.current = newMaxDepth;
 
-        setExpandedNodes((prev) => {
-          const next = new Set(prev);
-          for (const node of flattened) {
-            next.add(node.nodeId);
-          }
-          return next;
-        });
-
         updateContainerWidths(signalWidget.value.componentsTree.width);
+        setFlattenedNodes(flattened);
       }
     };
 
@@ -675,6 +726,8 @@ export const ComponentsTree = () => {
     const unsubscribeUpdates = inspectorUpdateSignal.subscribe(() => {
       if (Store.inspectState.value.kind === 'focused') {
         cancelAnimationFrame(rafId);
+        if (refIsResizing.current) return;
+
         rafId = requestAnimationFrame(() => {
           signalSkipTreeUpdate.value = false;
           updateTree();
@@ -693,7 +746,6 @@ export const ComponentsTree = () => {
       };
     };
   }, []);
-
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -754,48 +806,25 @@ export const ComponentsTree = () => {
   }, [selectedIndex, visibleNodes, handleElementClick, handleToggle]);
 
   useEffect(() => {
-    const getVisibleNodes = () => {
-      const visible: FlattenedNode[] = [];
-
-      for (const node of refFlattenedNodes.current) {
-        if (!node.parentId) {
-          visible.push(node);
-          continue;
-        }
-
-        let currentParentId: string | null = node.parentId;
-        let isVisible = true;
-
-        while (currentParentId !== null) {
-          if (!expandedNodes.has(currentParentId)) {
-            isVisible = false;
-            break;
-          }
-          const parentNode = refFlattenedNodes.current.find(
-            (n) => n.nodeId === currentParentId,
-          );
-          if (!parentNode) break;
-          currentParentId = parentNode.parentId;
-        }
-
-        if (isVisible) {
-          visible.push(node);
-        }
-      }
-
-      return visible;
-    };
-
-    setVisibleNodes(getVisibleNodes());
-  }, [expandedNodes]);
-
-  useEffect(() => {
     return searchState.subscribe(setSearchValue);
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
+  useEffect(() => {
+    const unsubscribe = signalWidget.subscribe((state) => {
+      updateContainerWidths(state.componentsTree.width);
+    });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   return (
     <>
-      <div onMouseDown={handleResize} className="relative resize-v-line">
+      <div
+        onMouseDown={handleResize}
+        className="relative resize-v-line"
+      >
         <span>
           <Icon name="icon-ellipsis" size={18} />
         </span>
@@ -809,22 +838,23 @@ export const ComponentsTree = () => {
               ref={refSearchInputContainer}
               title={`Search components by:
 
-• Component name (e.g. "Button")
-  - Matches any part of the name
-  - Case insensitive
+• Name (e.g., "Button") — Case insensitive, matches any part
 
-• Regular expression (e.g. "/^Button/")
-  - Wrap in forward slashes
-  - Case insensitive
+• Regular Expression (e.g., "/^Button/") — Use forward slashes
 
-• Wrapper type (e.g. "[memo,forward]")
-  - Available types:
-    • memo - Memoized component
-    • forwardRef - Forwards refs to DOM or components
-    • lazy - Code-split component
-    • suspense - Loading boundary
-  - Can use partial types (e.g. "for" matches "forwardRef")
-  - Multiple types with comma
+• Wrapper Type (e.g., "[memo,forwardRef]"):
+   - Available types: memo, forwardRef, lazy, suspense
+   - Matches any part of type name (e.g., "mo" matches "memo")
+   - Use commas for multiple types
+
+• Combined Search:
+   - Mix name/regex with type: "button [for]"
+   - Will match components satisfying both conditions
+
+• Navigation:
+   - Enter → Next match
+   - Shift + Enter → Previous match
+   - Cmd/Ctrl + Enter → Select and focus match (keeps search active)
 `}
               className={cn(
                 'relative',
@@ -852,9 +882,31 @@ export const ComponentsTree = () => {
                     e.stopPropagation();
                     e.currentTarget.focus();
                   }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
                       e.currentTarget.blur();
+                    }
+                    if (searchState.value.matches.length) {
+                      if (e.key === 'Enter' && e.shiftKey) {
+                        navigateSearch('prev');
+                      } else if (e.key === 'Enter') {
+                        if (e.metaKey || e.ctrlKey) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleElementClick(
+                            searchState.value.matches[
+                              searchState.value.currentMatchIndex
+                            ].element as HTMLElement,
+                          );
+
+                          e.currentTarget.focus();
+                        } else {
+                          navigateSearch('next');
+                        }
+                      }
                     }
                   }}
                   onChange={handleInputChange}
@@ -862,57 +914,65 @@ export const ComponentsTree = () => {
                   placeholder="Component name, /regex/, or [type]"
                 />
               </div>
-              {searchState.value.query && (
-                <>
-                  <span className="flex items-center gap-x-0.5 text-xs text-neutral-500">
-                    {searchState.value.currentMatchIndex + 1}
-                    {'|'}
-                    {searchState.value.matches.length}
-                  </span>
-                  {!!searchState.value.matches.length && (
+              {
+                searchState.value.query
+                  ? (
                     <>
+                      <span className="flex items-center gap-x-0.5 text-xs text-neutral-500">
+                        {searchState.value.currentMatchIndex + 1}
+                        {'|'}
+                        {searchState.value.matches.length}
+                      </span>
+                      {!!searchState.value.matches.length && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigateSearch('prev');
+                            }}
+                            className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
+                          >
+                            <Icon
+                              name="icon-chevron-right"
+                              className="-rotate-90"
+                              size={12}
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigateSearch('next');
+                            }}
+                            className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
+                          >
+                            <Icon
+                              name="icon-chevron-right"
+                              className="rotate-90"
+                              size={12}
+                            />
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigateSearch('prev');
+                          handleOnChangeSearch('');
                         }}
                         className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
                       >
-                        <Icon
-                          name="icon-chevron-right"
-                          className="-rotate-90"
-                          size={12}
-                        />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigateSearch('next');
-                        }}
-                        className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
-                      >
-                        <Icon
-                          name="icon-chevron-right"
-                          className="rotate-90"
-                          size={12}
-                        />
+                        <Icon name="icon-close" size={12} />
                       </button>
                     </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOnChangeSearch('');
-                    }}
-                    className="button rounded w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-300"
-                  >
-                    <Icon name="icon-close" size={12} />
-                  </button>
-                </>
-              )}
+                  )
+                  : !!flattenedNodes.length && (
+                    <span className="text-xs text-neutral-500">
+                      {flattenedNodes.length}
+                    </span>
+                  )
+              }
             </div>
           </div>
         </div>
@@ -963,7 +1023,7 @@ export const ComponentsTree = () => {
                       <TreeNodeItem
                         node={node}
                         onElementClick={handleElementClick}
-                        expandedNodes={expandedNodes}
+                        collapsedNodes={collapsedNodes}
                         onToggle={handleToggle}
                         searchValue={searchValue}
                       />

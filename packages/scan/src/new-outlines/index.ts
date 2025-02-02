@@ -472,9 +472,7 @@ export const initReactScanInstrumentation = () => {
       }
 
       if (Store.inspectState.value.kind === 'focused') {
-        if (isCompositeFiber(fiber)) {
-          inspectorUpdateSignal.value = Date.now();
-        }
+        inspectorUpdateSignal.value = Date.now();
       }
 
       ReactScanInternals.options.value.onRender?.(fiber, renders);

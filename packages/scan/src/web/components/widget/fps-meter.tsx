@@ -34,7 +34,7 @@ export const FpsMeter = () => {
     >
       <span
         ref={refFps}
-        data-text="60"
+        data-text="120"
         className="transition-color ease-in-out with-data-text"
       />
       <span className="tracking-wide font-mono text-xxs mt-[1px]">

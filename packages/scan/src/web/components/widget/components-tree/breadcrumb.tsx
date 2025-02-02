@@ -111,7 +111,7 @@ export const Breadcrumb = ({ selectedElement }: { selectedElement: HTMLElement |
               <button
                 type="button"
                 title={item.name}
-                style={{ maxWidth: '120px' }} // CSS hack to force truncation
+                style={{ maxWidth: '160px' }} // CSS hack to force truncation
                 className="truncate"
                 onClick={() => {
                   handleElementClick(item.element as HTMLElement);

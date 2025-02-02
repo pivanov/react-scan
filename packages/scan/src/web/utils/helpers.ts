@@ -5,6 +5,7 @@ import {
   SimpleMemoComponentTag,
   SuspenseComponentTag,
   getDisplayName,
+  hasMemoCache,
 } from 'bippy';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -111,68 +112,33 @@ export const getExtendedDisplayName = (fiber: Fiber): ExtendedDisplayName => {
     };
   }
 
-  const { tag, type } = fiber;
-
+  const { tag, type, elementType } = fiber;
   let name = getDisplayName(type);
   const wrappers: Array<string> = [];
-
-  // Check for wrapped components like Foo(Bar(Component))
-  // Match the outermost wrapper first, then work inwards
-  while (name && /^(\w+)\((.*)\)$/.test(name)) {
-    const wrapper = name.match(/^(\w+)\(/)?.[1];
-    if (wrapper) {
-      wrappers.unshift(wrapper); // Add to start of array to maintain order
-      name = name.slice(wrapper.length + 1, -1); // Remove wrapper and parentheses
-    }
-  }
-
   const wrapperTypes: Array<WrapperBadge> = [];
 
-  // Process wrappers in order they appear in the displayName
-  for (const wrapper of wrappers) {
-    if (wrapper.toLowerCase().includes('memo')) {
-      wrapperTypes.push({
-        type: 'memo',
-        title: 'Memoized component that skips re-renders if props are the same',
-        compiler: false,
-      });
-    } else if (wrapper.toLowerCase().includes('forwardref')) {
-      wrapperTypes.push({
-        type: 'forwardRef',
-        title:
-          'Component that can forward refs to DOM elements or other components',
-      });
-    }
-  }
-
-  // Check for React compiler auto-memoization
   if (
-    typeof type === 'function' &&
-    type !== null &&
-    '_automaticMemoized' in type
+    hasMemoCache(fiber) ||
+    tag === SimpleMemoComponentTag ||
+    tag === MemoComponentTag ||
+    (type as { $$typeof?: symbol })?.$$typeof === Symbol.for('react.memo') ||
+    (elementType as { $$typeof?: symbol })?.$$typeof ===
+      Symbol.for('react.memo')
   ) {
+    const compiler = hasMemoCache(fiber);
     wrapperTypes.push({
       type: 'memo',
-      title: 'This component has been auto-memoized by the React Compiler',
-      compiler: true,
-    });
-  }
-
-  // Add wrappers based on fiber tags
-  if (
-    (tag === SimpleMemoComponentTag || tag === MemoComponentTag) &&
-    !wrapperTypes.some((w) => w.type === 'memo' && !w.compiler)
-  ) {
-    wrapperTypes.push({
-      type: 'memo',
-      title: 'Memoized component that skips re-renders if props are the same',
-      compiler: false,
+      title: compiler
+        ? 'This component has been auto-memoized by the React Compiler.'
+        : 'Memoized component that skips re-renders if props are the same',
+      compiler,
     });
   }
 
   if (
-    tag === ForwardRefTag &&
-    !wrapperTypes.some((w) => w.type === 'forwardRef')
+    tag === ForwardRefTag ||
+    (type as { $$typeof?: symbol })?.$$typeof ===
+      Symbol.for('react.forward_ref')
   ) {
     wrapperTypes.push({
       type: 'forwardRef',
@@ -200,6 +166,21 @@ export const getExtendedDisplayName = (fiber: Fiber): ExtendedDisplayName => {
       type: 'profiler',
       title: 'Component that measures rendering performance',
     });
+  }
+
+  if (typeof name === 'string') {
+    const wrapperRegex = /^(\w+)\((.*)\)$/;
+    let currentName = name;
+    while (wrapperRegex.test(currentName)) {
+      const match = currentName.match(wrapperRegex);
+      if (match?.[1] && match?.[2]) {
+        wrappers.unshift(match[1]);
+        currentName = match[2];
+      } else {
+        break;
+      }
+    }
+    name = currentName;
   }
 
   return {

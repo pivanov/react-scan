@@ -14,6 +14,29 @@ export interface FiberMetadata {
 
 const metadata = readLocalStorage<FiberMetadata>('react-scann-pinned');
 
+export const getFiberPath = (fiber: Fiber): string => {
+  const pathSegments: string[] = [];
+  let currentFiber: Fiber | null = fiber;
+
+  while (currentFiber) {
+    const elementType = currentFiber.elementType;
+    const name =
+      typeof elementType === 'function'
+        ? elementType.displayName || elementType.name
+        : typeof elementType === 'string'
+          ? elementType
+          : 'Unknown';
+
+    const index =
+      currentFiber.index !== undefined ? `[${currentFiber.index}]` : '';
+    pathSegments.unshift(`${name}${index}`);
+
+    currentFiber = currentFiber.return ?? null;
+  }
+
+  return pathSegments.join('::');
+};
+
 export const getFiberMetadata = (fiber: Fiber): FiberMetadata | null => {
   if (!fiber || !fiber.elementType) return null;
 
@@ -35,43 +58,13 @@ export const getFiberMetadata = (fiber: Fiber): FiberMetadata | null => {
     parentFiber = parentFiber.return;
   }
 
-  const pathSegments: string[] = [];
-  let currentFiber: Fiber | null = fiber;
-
-  while (currentFiber) {
-    if (currentFiber.elementType?.name) {
-      const index =
-        currentFiber.index !== undefined ? `[${currentFiber.index}]` : '';
-      pathSegments.unshift(`${currentFiber.elementType.name}${index}`);
-    }
-    currentFiber = currentFiber.return ?? null;
-  }
-
-  const path = pathSegments.join('::');
+  const path = getFiberPath(fiber);
 
   const propKeys = fiber.pendingProps
     ? Object.keys(fiber.pendingProps).filter((key) => key !== 'children')
     : [];
 
   return { componentName, parent, position, sibling, path, propKeys };
-};
-
-const reconstructPath = (fiber: Fiber): string => {
-  const pathSegments: string[] = [];
-  let currentFiber = fiber;
-
-  while (currentFiber) {
-    if (currentFiber.elementType?.name) {
-      const index =
-        currentFiber.index !== undefined ? `[${currentFiber.index}]` : '';
-      pathSegments.unshift(`${currentFiber.elementType.name}${index}`);
-    }
-    const nextFiber = currentFiber.return;
-    if (!nextFiber) break;
-    currentFiber = nextFiber;
-  }
-
-  return pathSegments.join('::');
 };
 
 const checkFiberMatch = (fiber: Fiber | undefined): boolean => {
@@ -93,7 +86,7 @@ const checkFiberMatch = (fiber: Fiber | undefined): boolean => {
   if (parent !== metadata.parent) return false;
   if (fiber.index !== metadata.position) return false;
 
-  const fiberPath = reconstructPath(fiber);
+  const fiberPath = getFiberPath(fiber);
   return fiberPath === metadata.path;
 };
 

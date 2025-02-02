@@ -16,15 +16,6 @@ export interface FlattenedNode extends TreeNode {
   fiber: Fiber;
 }
 
-export const SEARCH_PREFIX_LENGTH = 3;
-
-export interface SearchIndex {
-  prefixMap: Map<string, Set<string>>;
-  nodeMap: Map<string, FlattenedNode>;
-  labelMap: Map<string, string>;
-  PREFIX_LENGTH: number;
-}
-
 export const searchState = signal<{
   query: string;
   matches: FlattenedNode[];
@@ -42,4 +33,4 @@ export interface TreeItem {
   fiber: Fiber;
 }
 
-export const signalSkipTreeUpdate = signal<boolean>(false);
+export const signalSkipTreeUpdate = signal(false);
