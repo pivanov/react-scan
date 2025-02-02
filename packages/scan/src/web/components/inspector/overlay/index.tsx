@@ -11,7 +11,6 @@ import {
 import { signalIsSettingsOpen } from '~web/state';
 import { cn, throttle } from '~web/utils/helpers';
 import { lerp } from '~web/utils/lerp';
-import { getFiberPath } from '~web/utils/pin';
 import { timelineState } from '../states';
 
 type DrawKind = 'locked' | 'inspecting';
