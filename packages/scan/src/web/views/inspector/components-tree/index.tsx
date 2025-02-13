@@ -958,7 +958,7 @@ export const ComponentsTree = () => {
   }, []);
 
   return (
-    <>
+    <div className="react-scan-components-tree flex">
       <div
         ref={refResizeHandle}
         onMouseDown={handleResize}
@@ -969,7 +969,7 @@ export const ComponentsTree = () => {
         </span>
       </div>
       <div ref={refMainContainer} className="flex flex-col h-full">
-        <div className="py-2 pr-2 border-b border-[#1e1e1e]">
+        <div className="p-2 border-b border-[#1e1e1e]">
           <div
             ref={refSearchInputContainer}
             title={`Search components by:
@@ -1113,7 +1113,7 @@ export const ComponentsTree = () => {
           <div
             ref={refContainer}
             onMouseLeave={onMouseLeave}
-            className="h-full overflow-auto will-change-transform"
+            className="tree h-full overflow-auto will-change-transform"
           >
             <div
               className="relative w-full"
@@ -1170,6 +1170,6 @@ export const ComponentsTree = () => {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };

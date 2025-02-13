@@ -640,7 +640,7 @@ export const PropertySection = ({
           className={cn(
             'react-scan-expandable',
             {
-              'react-scan-expanded py-0.5': isExpanded,
+              'react-scan-expanded': isExpanded,
             },
           )}
         >
